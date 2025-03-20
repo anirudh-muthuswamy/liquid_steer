@@ -1,7 +1,6 @@
 import pandas as pd
 import os
 import torch
-import torch.backends.mps as mps
 import numpy as np
 import cv2
 from torchvision import transforms
@@ -9,21 +8,18 @@ from torch.utils.data import Dataset, DataLoader
 from PIL import Image
 from check_data import get_preprocessed_data_pd
 
-mps.benchmark = True
-device = torch.device('mps')
-
-def df_split_train_test(df_filtered, train_dataset_path = 'train_data_filtered.csv', 
-                        test_dataset_path = 'test_data_filtered.csv',
+def df_split_train_val(df_filtered, train_dataset_path = 'train_data_filtered.csv', 
+                        val_dataset_path = 'val_data_filtered.csv',
                         train_size = 0.8):
     train_dataset = df_filtered[:int(train_size * len(df_filtered))]
-    test_dataset = df_filtered[int(train_size * len(df_filtered)):]
+    val_dataset = df_filtered[int(train_size * len(df_filtered)):]
     print('Train dataset length:', len(train_dataset))
-    print('Test dataset length:', len(test_dataset))
+    print('Val dataset length:', len(val_dataset))
 
     train_dataset.to_csv(train_dataset_path, index=False)
-    test_dataset.to_csv(test_dataset_path, index=False)
+    val_dataset.to_csv(val_dataset_path, index=False)
 
-    return train_dataset_path, test_dataset_path
+    return train_dataset_path, val_dataset_path
 
 def calculate_mean_and_std(dataset_path):
     num_pixels = 0
@@ -46,7 +42,7 @@ def calculate_mean_and_std(dataset_path):
     return mean, std
 
 class CustomDataset(Dataset):
-    def __init__(self, csv_file, seq_len, transform=None):
+    def __init__(self, csv_file, seq_len, device, transform=None):
         """
         Dataset that extracts continuous sequences from the given DataFrame.
 
@@ -54,6 +50,7 @@ class CustomDataset(Dataset):
         :param seq_len: Length of each sequence
         :param transform: Transformations for image preprocessing
         """
+        self.device = device
         self.df = pd.read_csv(csv_file)
         self.seq_len = seq_len
         self.transform = transform
@@ -87,13 +84,14 @@ class CustomDataset(Dataset):
             images = torch.stack([self.transform(img) for img in images])  # Apply transforms
         angles = torch.tensor(angles, dtype = torch.float32)
         
-        images = images.to(device = device)
-        angles = angles.to(device = device)
+        images = images.to(device = self.device)
+        angles = angles.to(device = self.device)
 
         return images, angles
     
-def create_train_test_dataset(train_csv_file, 
-                              test_csv_file,
+def create_train_val_dataset(train_csv_file, 
+                              val_csv_file,
+                              device,
                               seq_len = 64, 
                               imgw = 224,
                               imgh = 224,
@@ -107,32 +105,34 @@ def create_train_test_dataset(train_csv_file,
         transforms.Normalize(mean=mean, std=std)
     ])
 
-    train_dataset = CustomDataset(csv_file=train_csv_file, seq_len=seq_len, transform=transform)
-    test_dataset = CustomDataset(csv_file=test_csv_file, seq_len=seq_len, transform=transform)
+    train_dataset = CustomDataset(csv_file=train_csv_file, seq_len=seq_len, device=device,
+                                  transform=transform)
+    val_dataset = CustomDataset(csv_file=val_csv_file, seq_len=seq_len, device=device,
+                                transform=transform)
 
-    return train_dataset, test_dataset
+    return train_dataset, val_dataset
 
-def create_train_test_loader(train_dataset, test_dataset, batch_size=8, shuffle=False):
+def create_train_val_loader(train_dataset, val_dataset, batch_size=8, shuffle=False):
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=shuffle)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=shuffle)
 
     for inputs, labels in train_loader:
         print("Batch input shape:", inputs.shape)
         print("Batch label shape:", labels.shape)
         break 
 
-    return train_loader, test_loader
+    return train_loader, val_loader
 
 def get_default_loaders_for_training(data_dir, steering_angles_path):
     data_preprocessed_pd = get_preprocessed_data_pd(data_dir, steering_angles_path)
 
-    train_dataset_path, test_dataset_path = df_split_train_test(data_preprocessed_pd)
-    train_dataset , test_dataset = create_train_test_dataset(train_csv_file = train_dataset_path,
-                                                             test_csv_file = test_dataset_path)
-    train_loader, test_loader = create_train_test_loader(train_dataset, test_dataset)
+    train_dataset_path, val_dataset_path = df_split_train_val(data_preprocessed_pd)
+    train_dataset , val_dataset = create_train_val_dataset(train_csv_file = train_dataset_path,
+                                                             val_csv_file = val_dataset_path)
+    train_loader, val_loader = create_train_val_loader(train_dataset, val_dataset)
 
-    return train_loader, test_loader
+    return train_loader, val_loader
 
 if __name__ == '__main__':
 

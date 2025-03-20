@@ -41,19 +41,21 @@ class convolutional_head(nn.Module):
         batch_size = x.shape[0]
 
         # Apply convolutional layers
-        x = self.conv_layers(x)  # Shape: [batch, num_filters, height, width]
+        x = self.conv_layers(x)  # Shape: [batch, num_filters, height, width] -> [512, 8, 28, 28] for seq len of 64 and batch size of 8
 
         # Extract individual filter outputs
-        filter_outputs = torch.split(x, 1, dim=1)  # Splitting along channel dimension
+        filter_outputs = torch.split(x, 1, dim=1)  # Splitting along channel dimension -> len of 8 for num_filters = 8
+        #shape of a single filter_output -> [512, 1, 28, 28]
 
         feature_vectors = []
         for i in range(self.num_filters):
-            filter_out = filter_outputs[i].view(batch_size, -1)  # Flatten each filter output
-            feature_vec = F.relu(self.fc_layers[i](filter_out))  # Apply FC layer
+            filter_out = filter_outputs[i].view(batch_size, -1)  # Flatten each filter output -> shape of: [512, 784]
+            feature_vec = F.relu(self.fc_layers[i](filter_out))  # Apply FC layer -> shape of: [512, 4]
             feature_vectors.append(feature_vec)
 
         # Concatenate feature vectors
         feature_layer = torch.cat(feature_vectors, dim=1)  # Shape: [batch, num_filters * features_per_filter]
+        # shape of:[512, 32]
 
         return feature_layer
     
@@ -107,8 +109,8 @@ class NCPModel(nn.Module):
         features = features.view(batch_size, seq_len, -1)
 
         # Pass through LTC
-        outputs, _ = self.ltc(features)
+        outputs, _ = self.ltc(features) # shape of -> [batch, seq_len, 1]
 
         # Map NCP output to steering angle
-        predictions = self.fc_out(outputs)
+        predictions = self.fc_out(outputs) # shape of -> [batch, seq_len, 1]
         return predictions.squeeze(-1)  # Shape: [batch, seq_len]
