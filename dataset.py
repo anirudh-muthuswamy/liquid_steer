@@ -42,7 +42,7 @@ def calculate_mean_and_std(dataset_path):
     return mean, std
 
 class CustomDataset(Dataset):
-    def __init__(self, csv_file, seq_len, device, transform=None):
+    def __init__(self, csv_file, seq_len, imgh, imgw, transform=None):
         """
         Dataset that extracts continuous sequences from the given DataFrame.
 
@@ -50,10 +50,11 @@ class CustomDataset(Dataset):
         :param seq_len: Length of each sequence
         :param transform: Transformations for image preprocessing
         """
-        self.device = device
         self.df = pd.read_csv(csv_file)
         self.seq_len = seq_len
         self.transform = transform
+        self.imgh = 224
+        self.imgw = 224
 
         # Group by sequence_id and collect valid sequences
         self.sequences = []
@@ -74,48 +75,46 @@ class CustomDataset(Dataset):
         seq_batch = self.sequences[idx]  # Get one full sequence
         # Extract filepaths and steering angles
         img_names = seq_batch['filepath'].tolist()
-        angles = seq_batch['steering_angle'].tolist()
+        angles = torch.tensor(seq_batch['steering_angle'].tolist(), dtype=torch.float32)
 
-        # Read and process images
-        images = [cv2.imread(img_name) for img_name in img_names]
-        images = [cv2.cvtColor(img, cv2.COLOR_BGR2RGB) for img in images]
+        # Read and process images in one go with OpenCV
+        images = []
+        for img_name in img_names:
+            img = cv2.imread(img_name)
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            img = cv2.resize(img, (self.imgw, self.imgh ))  # Resize directly with OpenCV
+            images.append(img)
 
+        # Convert to tensor and normalize in batch
         if self.transform:
-            images = torch.stack([self.transform(img) for img in images])  # Apply transforms
-        angles = torch.tensor(angles, dtype = torch.float32)
-        
-        images = images.to(device = self.device)
-        angles = angles.to(device = self.device)
+            images = torch.stack([self.transform(img) for img in images])
 
         return images, angles
     
 def create_train_val_dataset(train_csv_file, 
                               val_csv_file,
-                              device,
                               seq_len = 64, 
                               imgw = 224,
                               imgh = 224,
-                              mean = [0.543146, 0.53002986, 0.50673143],
-                              std = [0.23295668, 0.22123158, 0.22100357]):
+                              mean=[0.485, 0.456, 0.406],
+                              std=[0.229, 0.224, 0.225]):
     
     transform = transforms.Compose([
-        transforms.ToPILImage(),
-        transforms.Resize((imgh, imgw)),  # Resize the image to the desired size
         transforms.ToTensor(),  # Convert image to PyTorch tensor
         transforms.Normalize(mean=mean, std=std)
     ])
 
-    train_dataset = CustomDataset(csv_file=train_csv_file, seq_len=seq_len, device=device,
+    train_dataset = CustomDataset(csv_file=train_csv_file, seq_len=seq_len,imgh = imgh, imgw=imgw,
                                   transform=transform)
-    val_dataset = CustomDataset(csv_file=val_csv_file, seq_len=seq_len, device=device,
+    val_dataset = CustomDataset(csv_file=val_csv_file, seq_len=seq_len,imgh = imgh, imgw=imgw,
                                 transform=transform)
 
     return train_dataset, val_dataset
 
 def create_train_val_loader(train_dataset, val_dataset, batch_size=8, shuffle=False):
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=shuffle)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=4, prefetch_factor=4, pin_memory=True, shuffle=shuffle)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, num_workers=4, prefetch_factor=4, pin_memory=True, shuffle=shuffle)
 
     for inputs, labels in train_loader:
         print("Batch input shape:", inputs.shape)

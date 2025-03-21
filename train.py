@@ -122,7 +122,6 @@ if __name__ == '__main__':
     
     train_dataset , val_dataset = create_train_val_dataset(train_csv_file = train_dataset_path,
                                                              val_csv_file = val_dataset_path,
-                                                             device=device,
                                                              seq_len=seq_len, imgw=imgw, imgh=imgh, mean=mean)
     
     train_loader, val_loader = create_train_val_loader(train_dataset, val_dataset,
