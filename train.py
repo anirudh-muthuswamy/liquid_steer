@@ -61,21 +61,21 @@ def train(train_loader, val_loader, optimizer, model, criterion, epochs=10, save
 
             total_loss += loss.item()
 
-    print(f" Validation Loss: {total_loss / len(val_loader)}")
+        print(f" Validation Loss: {total_loss / len(val_loader)}")
 
-    checkpoint = {
-    'model_state_dict': model.state_dict(),
-    'optimizer_state_dict': optimizer.state_dict(),
-    'epoch': epoch + 1, 
-    'training_losses': training_losses,
-    'validation_losses': validation_losses,
-    }
+        checkpoint = {
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'epoch': epoch + 1, 
+        'training_losses': training_losses,
+        'validation_losses': validation_losses,
+        }
 
-    model_path = os.path.join(save_dir, f'model_epoch{epoch+1}.pth')
-    torch.save(checkpoint, model_path)
-    print(f"Checkpoint saved to {save_dir}\n")
+        model_path = os.path.join(save_dir, f'model_epoch{epoch+1}.pth')
+        torch.save(checkpoint, model_path)
+        print(f"Checkpoint saved to {save_dir}\n")
 
-    model.train()  # Set model back to training mode
+        model.train()  # Set model back to training mode
 
     return model_path
 
