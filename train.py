@@ -29,16 +29,23 @@ def plot_loss_accuracy(train_loss, val_loss):
     plt.tight_layout()
     plt.show()
 
-def train(train_loader, val_loader, optimizer, model, criterion, epochs=10, save_dir = 'checkpoints/'):
-
-    training_losses = []
-    validation_losses = []
+def train_validate(train_loader, 
+          val_loader, 
+          optimizer, 
+          model, 
+          criterion, 
+          current_epoch=0, 
+          epochs=10, 
+          save_dir = 'checkpoints/',
+          training_losses = [],
+          validation_losses = []):
 
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
 
-    for epoch in range(epochs): 
-        for batch_idx, (batch_x, batch_y) in tqdm(enumerate(train_loader), desc='Training', total=len(train_loader), ncols=50):
+    for epoch in range(current_epoch, epochs): 
+        for _, (batch_x, batch_y) in tqdm(enumerate(train_loader), 
+                                          desc=f'Training {epoch+1}/{epochs}:', total=len(train_loader), ncols=100):
             batch_x, batch_y = batch_x.to(device), batch_y.to(device)
 
             optimizer.zero_grad()
@@ -48,18 +55,23 @@ def train(train_loader, val_loader, optimizer, model, criterion, epochs=10, save
             loss.backward()
             optimizer.step()
 
-        print(f"Epoch {epoch+1}: Loss = {loss.item()}", end='')
+        training_losses.append(loss.item())
+
+        print(f"Epoch {epoch+1}/{epochs}: Loss = {loss.item()}", end='')
 
         #validation loop
         model.eval()
         total_loss = 0
-        for batch_idx, (batch_x, batch_y) in tqdm(enumerate(val_loader), desc='Validation', total=len(val_loader), ncols=50):
+        for _, (batch_x, batch_y) in tqdm(enumerate(val_loader), 
+                                          desc=f'Validation {epoch+1}/{epochs}:', total=len(val_loader), ncols=100):
             batch_x, batch_y = batch_x.to(device), batch_y.to(device)
 
             predictions = model(batch_x)
             loss = criterion(predictions, batch_y)
 
             total_loss += loss.item()
+
+        validation_losses.append(total_loss/ len(val_loader))
 
         print(f" Validation Loss: {total_loss / len(val_loader)}")
 
@@ -94,6 +106,9 @@ if __name__ == '__main__':
         print("Using CPU")
 
     #data related parameters
+    load_from_ckpt = True
+    checkpoint_path = 'checkpoints/model_epoch4.pth'
+    current_epoch = 0
     data_dir = 'sullychen/07012018/data'
     steering_angles_txt_path = 'sullychen/07012018/data.txt'
     train_dataset_path = 'train_data_filtered.csv'
@@ -137,12 +152,36 @@ if __name__ == '__main__':
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.0001)
 
-    final_model_path = train(train_loader=train_loader,
+    if load_from_ckpt:
+        model_ckpt = torch.load(checkpoint_path, map_location=device)
+        model.load_state_dict(model_ckpt['model_state_dict'])
+        optimizer.load_state_dict(model_ckpt['optimizer_state_dict'])
+        current_epoch = model_ckpt['epoch']
+        training_losses = model_ckpt['training_losses']
+        validation_losses = model_ckpt['validation_losses']
+
+        print('checkpoint loaded successfully!')
+    else:
+            current_epoch = 0
+            training_losses = []
+            validation_losses = []
+    
+    if len(training_losses) > 0:
+        print("last training and validation losses:", training_losses[-1], validation_losses[-1])
+    else:
+        print('Training losses:', training_losses)
+        print('Validation losses:', validation_losses)
+    print('Current Epoch Number:', current_epoch)
+
+    final_model_path = train_validate(train_loader=train_loader,
           val_loader=val_loader,
           optimizer=optimizer,
           model=model,
           criterion=criterion,
-          epochs=100)
+          current_epoch=current_epoch,
+          epochs=10, 
+          training_losses=training_losses,
+          validation_losses=validation_losses)
     
     checkpoint = torch.load(final_model_path)
 
