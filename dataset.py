@@ -70,6 +70,8 @@ class CustomDataset(Dataset):
             for i in range(len(seq_data) - seq_len + 1):  # Only full sequences
                 self.sequences[(seq_id,i)] = (seq_data.iloc[i : i + seq_len])
 
+        self.index_map = {key: i for i, key in enumerate(self.sequences.keys())}
+
         print(f"Total sequences extracted: {len(self.sequences)}")
 
     def get_ith_element(self, od, i):
@@ -121,10 +123,12 @@ def create_train_val_dataset(train_csv_file,
 
     return train_dataset, val_dataset
 
-def create_train_val_loader(train_dataset, val_dataset, batch_size=8, shuffle=False):
+def create_train_val_loader(train_dataset, val_dataset, train_sampler=None, val_sampler=None, batch_size=8, shuffle=False):
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=4, prefetch_factor=4, pin_memory=True, shuffle=shuffle)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, num_workers=4, prefetch_factor=4, pin_memory=True, shuffle=shuffle)
+    train_loader = DataLoader(train_dataset, sampler=train_sampler, batch_size=batch_size, num_workers=4, prefetch_factor=4, 
+                              pin_memory=True, shuffle=shuffle)
+    val_loader = DataLoader(val_dataset, sampler=val_sampler, batch_size=batch_size, num_workers=4, prefetch_factor=4, 
+                            pin_memory=True, shuffle=shuffle)
 
     print('len of train loader:', len(train_loader))
     print('len of val loader', len(val_loader))
