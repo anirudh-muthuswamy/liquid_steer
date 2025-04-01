@@ -1,15 +1,17 @@
 import torch
+import os
+import cv2
+import collections
 import numpy as np
+import pandas as pd
 import torch.backends.mps as mps
 from matplotlib import animation
 import torch.backends.cudnn as cudnn
+from torchvision import transforms
+import torch.optim as optim
 import matplotlib.pyplot as plt
-from tqdm import tqdm
 from model import NCPModel
-from dataset import (df_split_train_val, create_train_val_dataset, create_train_val_loader,
-                     calculate_mean_and_std)
-from check_data import (get_full_image_filepaths, get_steering_angles,
-                        convert_to_df, filter_df_on_turns, group_data_by_sequences)
+from check_data import get_full_image_filepaths
 from torch.utils.data import Sampler, DataLoader
 from collections import OrderedDict
 
@@ -130,12 +132,107 @@ def plot_video_from_dataloader(dataloader, num_videos=3):
         # Here, labels[i] is assumed to be a tensor of shape [seq_len]
         display_sequence_as_video(imgs[i], labels[i])  # Show video for sequence i
 
+
+#wont work if the dataloader is sampled, need to have consecutive sequence numbers to have 
+#temporal dependency
+def get_predicted_steering_angles_from_dataloader(model, val_loader, val_dataset, output_dir):
+    model.eval()
+    output_df = []
+    for idx, (sequence_id, seq_num, batch_x, batch_y) in enumerate(val_loader):
+            batch_x, batch_y = batch_x.to(device), batch_y.to(device)
+
+            with torch.no_grad():
+                predictions = model(batch_x)
+
+            keys = list(zip(sequence_id.tolist(), seq_num.tolist()))
+            indices = [val_dataset.index_map[key] for key in keys]
+            values_df = [val_dataset.sequences[list(val_dataset.sequences.keys())[idx]] for idx in indices]
+
+            for i, df in enumerate(values_df):
+                df['predicted_angles'] = predictions[i].detach().cpu().numpy()
+
+            batch_df = pd.concat(values_df, ignore_index=True)  # Concatenate all DataFrames
+            output_df.append(batch_df)
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    output_df = pd.concat(output_df, ignore_index=True )
+    output_path = os.path.join(output_dir, 'val_loader_predictions.csv')
+    pd.DataFrame.to_csv(output_df, output_path, index= False)
+
+    print('Predictions saved to:', output_path)
+
+
+def get_predicted_steering_angles_from_images(model, images_dir='sullychen/07012018/data', 
+                                              num_frames = 1000,
+                                              transform_params={
+                                                  'mean':[0.543146, 0.53002986, 0.50673143],
+                                                  'std':[0.23295668, 0.22123158, 0.22100357],
+                                                  'imgh':224,
+                                                  'imgw':224}, 
+                                              display=False):
+
+    sequence_length = 64
+    frame_buffer = collections.deque(maxlen=sequence_length)  # Stores last 64 frames
+    transform = transforms.Compose([
+        transforms.ToTensor(),  # Convert image to PyTorch tensor
+        transforms.Normalize(mean=transform_params['mean'], std=transform_params['std'])
+    ])
+
+    filepaths = get_full_image_filepaths(images_dir)
+    predictions = {'filepath':[],
+                   'predicted_angles':[]}
+
+    for (i,frame) in enumerate(filepaths):
+        print('processing frame:', i)
+
+        if i == num_frames - 1:
+            break
+
+        img = cv2.imread(frame)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img = cv2.resize(img, (transform_params['imgw'], transform_params['imgh'])) 
+        img = transform(img)
+
+        frame_buffer.append(img)  # Add new frame
+        # Wait until we have at least 64 frames
+        if len(frame_buffer) < sequence_length:
+            continue
+        
+        input_sequence = torch.stack(list(frame_buffer)).unsqueeze(0).to(device)
+        
+        with torch.no_grad():
+            prediction = model(input_sequence)  # Shape: [1, 64]
+    
+        last_pred = prediction[:, -1].item()  # Return the last prediction
+
+        predictions['filepath'].append(frame)
+        predictions['predicted_angles'].append(last_pred)
+
+    predictions_df = pd.DataFrame(predictions)
+    pd.DataFrame.to_csv(predictions_df, 'code_files/predictons_from_img.csv')
+
+    return
+
 if __name__ == '__main__':
+
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+        cudnn.benchmark = True
+        print(f'Using CUDA device: {torch.cuda.get_device_name(0)}')
+    elif torch.backends.mps.is_available():
+        device = torch.device('mps')
+        mps.benchmark = True
+        print("Using MPS device")
+    else:
+        device = torch.device('cpu')
+        print("Using CPU")
 
     data_dir = 'sullychen/07012018/data'
     steering_angles_txt_path = 'sullychen/07012018/data.txt'
     train_dataset_path = 'train_data_filtered.csv'
     val_dataset_path = 'val_data_filtered.csv'
+    checkpoint_path = 'checkpoints/model_epoch4.pth'
     train_size = 0.8
     seq_len = 64
     imgw = 224
@@ -145,24 +242,45 @@ if __name__ == '__main__':
     batch_size = 8
     shuffle = False
 
-    img_paths = get_full_image_filepaths(data_dir)
-    steering_angles = get_steering_angles(steering_angles_txt_path)
+    # img_paths = get_full_image_filepaths(data_dir)
+    # steering_angles = get_steering_angles(steering_angles_txt_path)
 
-    data_pd = convert_to_df(img_paths, steering_angles)
-    data_pd_filtered = filter_df_on_turns(data_pd)
-    data_pd_filtered = group_data_by_sequences(data_pd_filtered)
+    # data_pd = convert_to_df(img_paths, steering_angles)
+    # data_pd_filtered = filter_df_on_turns(data_pd)
+    # data_pd_filtered = group_data_by_sequences(data_pd_filtered)
 
-    train_dataset_path, val_dataset_path = df_split_train_val(data_pd_filtered, train_dataset_path, 
-                                                                    val_dataset_path, train_size)
+    # train_dataset_path, val_dataset_path = df_split_train_val(data_pd_filtered, train_dataset_path, 
+    #                                                                 val_dataset_path, train_size)
         
-    train_dataset , val_dataset = create_train_val_dataset(train_csv_file = train_dataset_path,
-                                                                val_csv_file = val_dataset_path,
-                                                                seq_len=seq_len, imgw=imgw, imgh=imgh, mean=mean)
+    # train_dataset , val_dataset = create_train_val_dataset(train_csv_file = train_dataset_path,
+    #                                                             val_csv_file = val_dataset_path,
+    #                                                             seq_len=seq_len, imgw=imgw, imgh=imgh, mean=mean)
     
-    train_sampler = UniqueSequenceSampler(train_dataset, seq_len)
-    val_sampler = UniqueSequenceSampler(val_dataset, seq_len)
+    # train_sampler = UniqueSequenceSampler(train_dataset, seq_len)
+    # val_sampler = UniqueSequenceSampler(val_dataset, seq_len)
         
-    train_loader, val_loader = create_train_val_loader(train_dataset, val_dataset, train_sampler, val_sampler, 
-                                                            batch_size=batch_size, shuffle=shuffle)
+    # train_loader_sampled, val_loader_sampled = create_train_val_loader(train_dataset, val_dataset, train_sampler, val_sampler, 
+    #                                                         batch_size=batch_size, shuffle=shuffle)
 
-    plot_video_from_dataloader(train_loader, num_videos=3)
+    # plot_video_from_dataloader(train_loader_sampled, num_videos=3)
+
+    #load model from checkpoint:
+    # Assuming extracted features are 32-dimensional
+    model = NCPModel(num_filters=8, features_per_filter=4, inter_neurons = 12, command_neurons = 6,
+                     motor_neurons = 1, sensory_fanout = 6, inter_fanout = 4, 
+                     recurrent_command_synapses = 6, motor_fanin = 6, seed = 20190120, device=device) 
+    optimizer = optim.Adam(model.parameters(), lr=0.0001)
+    model = model.to(device)
+    model_ckpt = torch.load(checkpoint_path, map_location=device)
+
+    model.load_state_dict(model_ckpt['model_state_dict'])
+    optimizer.load_state_dict(model_ckpt['optimizer_state_dict'])
+    current_epoch = model_ckpt['epoch']
+    training_losses = model_ckpt['training_losses']
+    validation_losses = model_ckpt['validation_losses']
+
+    print('checkpoint loaded successfully!')
+
+    # get_predicted_steering_angles_from_dataloader(model, val_loader_sampled, val_dataset, output_dir='code_files/')
+
+    get_predicted_steering_angles_from_images(model, data_dir)
