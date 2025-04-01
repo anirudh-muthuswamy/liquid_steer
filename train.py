@@ -44,7 +44,7 @@ def train_validate(train_loader,
         os.makedirs(save_dir)
 
     for epoch in range(current_epoch, epochs): 
-        for _, (batch_x, batch_y) in tqdm(enumerate(train_loader), 
+        for _, (_, _, batch_x, batch_y) in tqdm(enumerate(train_loader), 
                                           desc=f'Training {epoch+1}/{epochs}:', total=len(train_loader), ncols=100):
             batch_x, batch_y = batch_x.to(device), batch_y.to(device)
 
@@ -62,7 +62,7 @@ def train_validate(train_loader,
         #validation loop
         model.eval()
         total_loss = 0
-        for _, (batch_x, batch_y) in tqdm(enumerate(val_loader), 
+        for _, (_, _, batch_x, batch_y) in tqdm(enumerate(val_loader), 
                                           desc=f'Validation {epoch+1}/{epochs}:', total=len(val_loader), ncols=100):
             batch_x, batch_y = batch_x.to(device), batch_y.to(device)
 
