@@ -42,7 +42,7 @@ class UniqueSequenceSampler(Sampler):
 
 def reverse_transform(tensor):
     """
-    Reverse the preprocessing transformations: Normalize -> Convert to PIL Image
+    Reverse the preprocessing transformations
     """
     # Imagenet mean and std for normalization
     mean = torch.tensor([0.485, 0.456, 0.406])

@@ -66,8 +66,9 @@ def train_validate(train_loader,
                                           desc=f'Validation {epoch+1}/{epochs}:', total=len(val_loader), ncols=100):
             batch_x, batch_y = batch_x.to(device), batch_y.to(device)
 
-            predictions = model(batch_x)
-            loss = criterion(predictions, batch_y)
+            with torch.no_grad():
+                predictions = model(batch_x)
+                loss = criterion(predictions, batch_y)
 
             total_loss += loss.item()
 
