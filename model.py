@@ -4,8 +4,6 @@ from ncps.wirings import NCP
 from ncps.torch import LTC
 import torch.nn.functional as F
 
-device = torch.device('mps')
-
 class convolutional_head(nn.Module):
     def __init__(self, num_filters = 8, features_per_filter = 4):
         super(convolutional_head, self).__init__()
@@ -64,7 +62,7 @@ class NCPModel(nn.Module):
     def __init__(self, num_filters=8, features_per_filter=4, 
                  inter_neurons = 12, command_neurons = 6, motor_neurons = 1, 
                  sensory_fanout = 6, inter_fanout = 4, recurrent_command_synapses = 6,
-                 motor_fanin = 6, seed = 20190120, device = torch.device('mps')):
+                 motor_fanin = 6, seed = 20190120):
         super(NCPModel, self).__init__()
 
         # Define NCP wiring based on CommandLayerWormnetArchitectureMK2 parameters
@@ -76,7 +74,7 @@ class NCPModel(nn.Module):
             inter_fanout=inter_fanout,     # Number of command neurons each interneuron connects to
             recurrent_command_synapses=recurrent_command_synapses,  # Recurrent connections in the command layer
             motor_fanin=motor_fanin,      # Number of command neurons each motor neuron connects to
-            seed=20190120       # Random seed for reproducibility
+            seed=seed       # Random seed for reproducibility
         )
 
         self.conv_head = convolutional_head(num_filters, features_per_filter)

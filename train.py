@@ -146,7 +146,7 @@ if __name__ == '__main__':
     # Assuming extracted features are 32-dimensional
     model = NCPModel(num_filters=8, features_per_filter=4, inter_neurons = 12, command_neurons = 6,
                      motor_neurons = 1, sensory_fanout = 6, inter_fanout = 4, 
-                     recurrent_command_synapses = 6, motor_fanin = 6, seed = 20190120, device=device) 
+                     recurrent_command_synapses = 6, motor_fanin = 6, seed = 20190120) 
     model = model.to(device)
 
     # Define loss function and optimizer
