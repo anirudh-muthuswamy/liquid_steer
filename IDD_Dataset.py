@@ -8,6 +8,7 @@ import glob
 import matplotlib.pyplot as plt
 from torchvision import transforms as T
 from torch.utils.data import Dataset, DataLoader
+import segmentation_models_pytorch as smp
 
 
 def create_csv(split='train', base_dir='idd20kII', save_dir='code_files'):
@@ -38,14 +39,20 @@ def create_csv(split='train', base_dir='idd20kII', save_dir='code_files'):
 
     return pd.DataFrame(matched_data)
 
-def reverse_augmentation(image, mask, normalized = False):
-    image_numpy = image.permute(1, 2, 0).cpu().numpy()  # Rearrange dimensions to (H, W, C)
-
-    # If the image is normalized (e.g., values between 0 and 1), scale it back to [0, 255] for plotting
-    if normalized == False:
-        image_numpy = (image_numpy).astype(np.uint8)
-    else:
-        image_numpy = (image_numpy*255).astype(np.uint8)
+def reverse_augmentation(image, mask):
+    # Imagenet mean and std for normalization
+    mean = torch.tensor([0.485, 0.456, 0.406])
+    std = torch.tensor([0.229, 0.224, 0.225])
+    
+    # Undo normalization
+    image = image * std[:, None, None] + mean[:, None, None]
+    
+    # Clip values to [0, 1] (in case normalization introduces out-of-bounds values)
+    image = torch.clamp(image, 0, 1)
+    
+    # Convert to NumPy array
+    image_numpy = image.permute(1, 2, 0).numpy()  # C x H x W -> H x W x C for Matplotlib
+    image_numpy = (image_numpy * 255).astype(np.uint8)  # Scale to [0, 255] for visualization
     
     mask_numpy = mask.permute(1,2,0).cpu().numpy()
 
@@ -61,11 +68,16 @@ class IDDDataset(Dataset):
 
     ):
         self.df = df
-        self.train = aug
+        self.aug = aug
         self.image_paths = sorted(self.df["image"].tolist())
         self.mask_paths = sorted(self.df["mask"].tolist())
  
         self.select_class = select_class
+
+    def _preprocess_img(self):
+        return T.Compose([
+            T.Normalize(mean = [0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
 
     def _get_augmentation_random_flip(self):
         return T.Compose([
@@ -94,10 +106,10 @@ class IDDDataset(Dataset):
         mask = filtered_mask
 
         mask = np.expand_dims(mask, axis=0)  # Add channel dimension for masks
-        mask = torch.tensor(mask, dtype=torch.long)  # Shape: (1, H, W)
+        mask = torch.tensor(mask, dtype=torch.long)# Shape: (1, H, W)
 
         # apply augmentations
-        if self.train:
+        if self.aug:
             random_flip = random.choices([True, False], weights=[0.75, 0.25])[0]
             if random_flip:
                 image = self._get_augmentation_random_flip()(image)
@@ -106,7 +118,9 @@ class IDDDataset(Dataset):
                 image = self._get_augmentation()(image)
                 mask = self._get_augmentation()(mask)
 
-        return image, mask
+        image = self._preprocess_img()(image)
+
+        return image, mask.round().long()
          
     def __len__(self):
         # return length of 
@@ -117,41 +131,14 @@ if __name__ == '__main__':
     train_df = create_csv(split='train')
     val_df = create_csv(split='val')
 
+    train_dataset = IDDDataset(train_df, select_class=[0], aug=True)
+    val_dataset = IDDDataset(val_df, select_class=[0], aug=False)
 
-    dataset = IDDDataset(train_df, select_class=[0], aug=False)
-    image, mask = dataset[0]
+    train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True, prefetch_factor=2, pin_memory=True, num_workers=4)
+    valid_loader = DataLoader(val_dataset, batch_size=1, shuffle=False, prefetch_factor=2, pin_memory=True, num_workers=4)
 
-    image, mask = reverse_augmentation(image, mask, normalized=False)
-
-    plt.figure(figsize=(15,8))
-
-    plt.subplot(1,2,1)
-    plt.imshow(image)
-
-    plt.subplot(1,2,2)
-    plt.imshow(mask)
-
-    plt.show()
-
-    augmented_dataset = IDDDataset(
-    train_df,
-    select_class=[0],
-    aug=True)
-
-    random_idx = random.randint(0, len(augmented_dataset)-1)
-
-    # Different augmentations on a random image/mask pair (256*256 crop)
-    for i in range(3):
-        image, mask = augmented_dataset[random_idx]
-        
-        image, mask = reverse_augmentation(image, mask, normalized=True)
-
-        plt.figure(figsize=(15,8))
-        plt.subplot(1,2,1)
-        plt.imshow(image)
-
-        plt.subplot(1,2,2)
-        plt.imshow(mask)
-        plt.show()
-    
+    for images, masks in train_loader:
+        print(images.shape)
+        print(masks.shape)
+        break
     
