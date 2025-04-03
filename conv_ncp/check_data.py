@@ -149,7 +149,7 @@ def filter_df_on_turns(data_pd, turn_threshold = 0.06, buffer_before = 60, buffe
 
     return data_pd_filtered
 
-def group_data_by_sequences(data_pd_filtered):
+def group_data_by_sequences(data_pd_filtered, save_dir):
     sequence_lengths = data_pd_filtered.groupby("sequence_id").size()
 
     print(f"Minimum sequence length: {min(sequence_lengths)}")
@@ -164,12 +164,15 @@ def group_data_by_sequences(data_pd_filtered):
     print(f"Total valid sequences: {len(valid_sequences)}")
 
     # Save or visualize
-    data_pd_filtered.to_csv("filtered_steering_data.csv", index=False)
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+    data_pd_filtered.to_csv(os.path.join(save_dir,"filtered_ncp_steering_data.csv"), index=False)
 
     return data_pd_filtered
 
 def get_preprocessed_data_pd(data_dir, steering_angles_txt_path, filter = True,
-                             turn_threshold = 0.06, buffer_before = 60, buffer_after = 60):
+                             turn_threshold = 0.06, buffer_before = 60, buffer_after = 60,
+                             save_dir = 'data/csv_files'):
     img_paths = get_full_image_filepaths(data_dir)
     steering_angles, timestamps = get_steering_angles(steering_angles_txt_path)
 
@@ -177,7 +180,7 @@ def get_preprocessed_data_pd(data_dir, steering_angles_txt_path, filter = True,
     if filter:
         data_pd_filtered = filter_df_on_turns(data_pd, turn_threshold = turn_threshold, 
                                               buffer_before = buffer_before, buffer_after = buffer_after)
-        data_pd_filtered = group_data_by_sequences(data_pd_filtered)
+        data_pd_filtered = group_data_by_sequences(data_pd_filtered, save_dir)
 
         return data_pd_filtered
     
@@ -195,20 +198,24 @@ def get_preprocessed_data_pd(data_dir, steering_angles_txt_path, filter = True,
     # Add sequence_id column to DataFrame
     data_pd['sequence_id'] = sequence_ids
 
-    data_pd.to_csv("filtered_steering_data.csv", index=False)
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+    data_pd.to_csv(os.path.join(save_dir,"ncp_steering_data.csv"), index=False)
     
     return data_pd
 
 if __name__ == '__main__':
 
-    data_dir = 'sullychen/07012018/data'
-    steering_angles_txt_path = 'sullychen/07012018/data.txt'
+    data_dir = 'data/sullychen/07012018/data'
+    steering_angles_txt_path = 'data/sullychen/07012018/data.txt'
+    save_dir = 'data/csv_files'
     filter = True
     turn_threshold = 0.06 
     buffer_before = 60 
     buffer_after = 60
 
     data_preprocessed_pd = get_preprocessed_data_pd(data_dir, steering_angles_txt_path, filter,
-                                                    turn_threshold, buffer_before, buffer_after)
+                                                    turn_threshold, buffer_before, buffer_after,
+                                                    save_dir=save_dir)
 
     print(data_preprocessed_pd.head(5))

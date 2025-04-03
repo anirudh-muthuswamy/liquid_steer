@@ -10,8 +10,8 @@ import torch.backends.cudnn as cudnn
 from torchvision import transforms
 import torch.optim as optim
 import matplotlib.pyplot as plt
-from model import NCPModel
-from check_data import get_full_image_filepaths
+from code_files.conv_ncp.model import ConvNCPModel
+from code_files.conv_ncp.check_data import get_full_image_filepaths
 from torch.utils.data import Sampler, DataLoader
 from collections import OrderedDict
 
@@ -184,7 +184,7 @@ def get_predicted_steering_angles_from_images(model, images_dir='sullychen/07012
                    'predicted_angles':[]}
 
     for (i,frame) in enumerate(filepaths):
-        print('processing frame:', i)
+        print('processing frame:', i, end='\t')
 
         if i == num_frames - 1:
             break
@@ -205,6 +205,7 @@ def get_predicted_steering_angles_from_images(model, images_dir='sullychen/07012
             prediction = model(input_sequence)  # Shape: [1, 64]
     
         last_pred = prediction[:, -1].item()  # Return the last prediction
+        print('pred angle:', last_pred)
 
         predictions['filepath'].append(frame)
         predictions['predicted_angles'].append(last_pred)
@@ -232,9 +233,9 @@ if __name__ == '__main__':
     steering_angles_txt_path = 'sullychen/07012018/data.txt'
     train_dataset_path = 'train_data_filtered.csv'
     val_dataset_path = 'val_data_filtered.csv'
-    checkpoint_path = 'checkpoints/model_epoch4.pth'
+    checkpoint_path = 'checkpoints/model_epoch75.pth'
     train_size = 0.8
-    seq_len = 64
+    seq_len = 32
     imgw = 224
     imgh = 224
     mean = [0.543146, 0.53002986, 0.50673143]
@@ -266,7 +267,7 @@ if __name__ == '__main__':
 
     #load model from checkpoint:
     # Assuming extracted features are 32-dimensional
-    model = NCPModel(num_filters=8, features_per_filter=4, inter_neurons = 12, command_neurons = 6,
+    model = ConvNCPModel(num_filters=8, features_per_filter=4, inter_neurons = 12, command_neurons = 6,
                      motor_neurons = 1, sensory_fanout = 6, inter_fanout = 4, 
                      recurrent_command_synapses = 6, motor_fanin = 6, seed = 20190120) 
     optimizer = optim.Adam(model.parameters(), lr=0.0001)

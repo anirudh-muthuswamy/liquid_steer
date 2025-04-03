@@ -8,8 +8,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from model import ConvNCPModel, WeightedSteeringLoss
 from dataset import (df_split_train_val, create_train_val_dataset, create_train_val_loader)
-from check_data import (get_full_image_filepaths, get_steering_angles,
-                        convert_to_df, filter_df_on_turns, group_data_by_sequences)
+from check_data import get_preprocessed_data_pd
 from argparse import ArgumentParser
 
 def plot_loss_accuracy(train_loss, val_loss):
@@ -28,7 +27,7 @@ def plot_loss_accuracy(train_loss, val_loss):
     plt.tight_layout()
     plt.show()
 
-def train_validate(train_loader, val_loader, optimizer, model, criterion, current_epoch=0, epochs=10, 
+def train_validate(train_loader, val_loader, optimizer, model, criterion, train_params, current_epoch=0, epochs=10, 
                    save_dir = 'checkpoints/', training_losses = [], validation_losses = [], save_every=10):
 
     if not os.path.exists(save_dir):
@@ -86,6 +85,7 @@ def train_validate(train_loader, val_loader, optimizer, model, criterion, curren
             'epoch': epoch + 1,
             'training_losses': training_losses,
             'validation_losses': validation_losses,
+            'train_params': train_params,
             }
 
             model_path = os.path.join(save_dir, f'model_epoch{epoch+1}.pth')
@@ -100,17 +100,14 @@ def create_parser():
     # Data related parameters
     parser.add_argument('--load_from_ckpt', action='store_true', default=False,
                         help='Whether to load from checkpoint')
-    parser.add_argument('--save_dir', type=str, default='checkpoints_sl_32_ss_32_bs16_weighted',
+    parser.add_argument('--save_dir', type=str, default='checkpoints/conv_ncp/sl_32_ss_32_bs16_weighted',
                         help='Directory to save checkpoints')
-    parser.add_argument('--checkpoint_path', type=str, default='checkpoints_sl_32_ss_32_bs16_weighted/model_epoch10.pth',
+    parser.add_argument('--checkpoint_path', type=str, 
+                        default='checkpoints/conv_ncp/sl_32_ss_32_bs16_weighted/model_epoch10.pth',
                         help='Path to the checkpoint to load from')
-    parser.add_argument('--data_dir', type=str, default='sullychen/07012018/data',
-                        help='Directory containing the Images')
-    parser.add_argument('--steering_angles_txt_path', type=str, default='sullychen/07012018/data.txt',
-                        help='Path to the steering angles text file')
-    parser.add_argument('--train_dataset_path', type=str, default='train_data_filtered.csv',
+    parser.add_argument('--train_dataset_path', type=str, default='data/csv_files/train_ncp_data_filtered.csv',
                         help='Path to the training dataset CSV')
-    parser.add_argument('--val_dataset_path', type=str, default='val_data_filtered.csv',
+    parser.add_argument('--val_dataset_path', type=str, default='data/csv_files/val_ncp_data_filtered.csv',
                         help='Path to the validation dataset CSV')
     parser.add_argument('--train_size', type=float, default=0.8,
                         help='Proportion of data to use for training')
@@ -140,7 +137,6 @@ def create_parser():
                         help='Learning rate for NCP')
     parser.add_argument('--optim_betas', type=float, nargs=2, default=(0.9, 0.999),
                         help='Beta parameters for Adam optimizer')
-    
     return parser
 
 if __name__ == '__main__':
@@ -164,42 +160,33 @@ if __name__ == '__main__':
     load_from_ckpt = args.load_from_ckpt
     save_dir = args.save_dir
     checkpoint_path = args.checkpoint_path
-    data_dir = args.data_dir
-    steering_angles_txt_path = args.steering_angles_txt_path
     train_dataset_path = args.train_dataset_path
     val_dataset_path = args.val_dataset_path
-    train_size = args.train_size
-    seq_len = args.seq_len
-    step_size = args.step_size
-    imgw = args.imgw
-    imgh = args.imgh
-    mean = args.mean
-    std = args.std
-    batch_size = args.batch_size
-    shuffle = args.shuffle
 
-    #optimizer parameters
-    conv_head_lr = args.conv_head_lr
-    ncp_lr = args.ncp_lr
-    optim_betas = args.optim_betas
+    train_params = {
+    'train_size': args.train_size,
+    'seq_len': args.seq_len,
+    'step_size': args.step_size,
+    'imgw': args.imgw,
+    'imgh': args.imgh,
+    'mean': args.mean,
+    'std': args.std,
+    'batch_size': args.batch_size,
+    'shuffle': args.shuffle,
+    'conv_head_lr': args.conv_head_lr,
+    'ncp_lr': args.ncp_lr,
+    'optim_betas': args.optim_betas}
 
-    img_paths = get_full_image_filepaths(data_dir)
-    steering_angles = get_steering_angles(steering_angles_txt_path)
-
-    data_pd = convert_to_df(img_paths, steering_angles)
-    data_pd_filtered = filter_df_on_turns(data_pd)
-    data_pd_filtered = group_data_by_sequences(data_pd_filtered)
-
-    train_dataset_path, val_dataset_path = df_split_train_val(data_pd_filtered, train_dataset_path, 
-                                                                val_dataset_path, train_size)
-    
     train_dataset , val_dataset = create_train_val_dataset(train_csv_file = train_dataset_path,
                                                              val_csv_file = val_dataset_path,
-                                                             seq_len=seq_len, step_size=step_size,
-                                                             imgw=imgw, imgh=imgh, mean=mean)
+                                                             seq_len=train_params['seq_len'], 
+                                                             step_size=train_params['step_size'],
+                                                             imgw=train_params['imgw'], imgh=train_params['imgh'], 
+                                                             mean=train_params['mean'])
     
     train_loader, val_loader = create_train_val_loader(train_dataset, val_dataset,
-                                                         batch_size=batch_size, shuffle=shuffle)
+                                                         batch_size=train_params['batch_size'], 
+                                                         shuffle=train_params['shuffle'])
     
     # Assuming extracted features from conv head (8*4) are 32-dimensional
     model = ConvNCPModel(num_filters=8, features_per_filter=4, inter_neurons = 12, command_neurons = 6,
@@ -211,11 +198,12 @@ if __name__ == '__main__':
     criterion = WeightedSteeringLoss(alpha=0.1)
     optimizer = optim.Adam([
     # Convolutional head
-    {'params': model.conv_head.parameters(), 'lr': conv_head_lr},
+    {'params': model.conv_head.parameters(), 'lr': train_params['conv_head_lr']},
     # NCP/LTC
-    {'params': model.ltc.parameters(), 'lr': ncp_lr},
+    {'params': model.ltc.parameters(), 'lr': train_params['ncp_lr']},
     # Output layer
-    {'params': model.fc_out.parameters(), 'lr': ncp_lr}], betas=optim_betas)
+    {'params': model.fc_out.parameters(), 'lr': train_params['ncp_lr']}], 
+        betas=train_params['optim_betas'])
 
     if load_from_ckpt:
         model_ckpt = torch.load(checkpoint_path, map_location=device)
@@ -224,6 +212,9 @@ if __name__ == '__main__':
         current_epoch = model_ckpt['epoch']
         training_losses = model_ckpt['training_losses']
         validation_losses = model_ckpt['validation_losses']
+        loaded_train_params = model_ckpt['train_params']
+
+        assert loaded_train_params == train_params
 
         print('checkpoint loaded successfully!')
     else:
@@ -242,6 +233,7 @@ if __name__ == '__main__':
           val_loader=val_loader,
           optimizer=optimizer,
           model=model,
+          train_params=train_params,
           criterion=criterion,
           current_epoch=current_epoch,
           epochs=10, 

@@ -75,7 +75,6 @@ class convolutional_head(nn.Module):
 
         return feature_layer
     
-
 class ConvNCPModel(nn.Module):
     def __init__(self, num_filters=8, features_per_filter=4, 
                  inter_neurons = 12, command_neurons = 6, motor_neurons = 1, 

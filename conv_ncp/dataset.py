@@ -10,18 +10,20 @@ from torch.utils.data import Dataset, DataLoader
 from PIL import Image
 from check_data import get_preprocessed_data_pd
 
-def df_split_train_val(df_filtered, train_dataset_path = 'train_data_filtered.csv', 
-                        val_dataset_path = 'val_data_filtered.csv',
-                        train_size = 0.8):
+def df_split_train_val(df_filtered, train_csv_filename, val_csv_filename,
+                       save_dir='data/csv_files',train_size = 0.8):
     train_dataset = df_filtered[:int(train_size * len(df_filtered))]
     val_dataset = df_filtered[int(train_size * len(df_filtered)):]
     print('Train dataset length:', len(train_dataset))
     print('Val dataset length:', len(val_dataset))
+    print(save_dir)
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
 
-    train_dataset.to_csv(train_dataset_path, index=False)
-    val_dataset.to_csv(val_dataset_path, index=False)
+    train_dataset.to_csv(os.path.join(save_dir,train_csv_filename), index=False)
+    val_dataset.to_csv(os.path.join(save_dir,val_csv_filename), index=False)
 
-    return train_dataset_path, val_dataset_path
+    return os.path.join(save_dir,train_csv_filename), os.path.join(save_dir,val_csv_filename)
 
 def calculate_mean_and_std(dataset_path):
     num_pixels = 0
@@ -142,12 +144,21 @@ def create_train_val_loader(train_dataset, val_dataset, train_sampler=None, val_
 
     return train_loader, val_loader
 
-def get_default_loaders_for_training(data_dir, steering_angles_path, step_size, filter, turn_threshold, 
-                                     buffer_before, buffer_after):
+def get_loaders_for_training(data_dir, steering_angles_path, step_size, filter, turn_threshold, 
+                                     buffer_before, buffer_after, save_dir):
     data_preprocessed_pd = get_preprocessed_data_pd(data_dir, steering_angles_path, filter, turn_threshold, 
-                                     buffer_before, buffer_after)
+                                     buffer_before, buffer_after, save_dir)
+    
+    if filter:
+        train_csv_filename = 'train_ncp_data_filtered.csv'
+        val_csv_filename = 'val_ncp_data_filtered.csv'
+    else:
+        train_csv_filename = 'train_ncp_data.csv'
+        val_csv_filename = 'val_ncp_data.csv'
 
-    train_dataset_path, val_dataset_path = df_split_train_val(data_preprocessed_pd)
+    train_dataset_path, val_dataset_path = df_split_train_val(data_preprocessed_pd, save_dir=save_dir,
+                                                              train_csv_filename=train_csv_filename,
+                                                              val_csv_filename=val_csv_filename)
     train_dataset , val_dataset = create_train_val_dataset(train_csv_file = train_dataset_path,
                                                              val_csv_file = val_dataset_path,
                                                              step_size=step_size)
@@ -157,15 +168,16 @@ def get_default_loaders_for_training(data_dir, steering_angles_path, step_size, 
 
 if __name__ == '__main__':
 
-    data_dir = 'sullychen/07012018/data'
-    steering_angles_txt_path = 'sullychen/07012018/data.txt'
+    data_dir = 'data/sullychen/07012018/data'
+    steering_angles_txt_path = 'data/sullychen/07012018/data.txt'
+    save_dir = 'data/csv_files'
     step_size = 32
-    filter = True
+    filter = False
     turn_threshold = 0.06 
     buffer_before = 60 
     buffer_after = 60
 
-    get_default_loaders_for_training(data_dir, steering_angles_txt_path, 
+    get_loaders_for_training(data_dir, steering_angles_txt_path, 
                                      step_size=step_size, filter=filter,
                                      turn_threshold=turn_threshold, buffer_before=buffer_before,
-                                     buffer_after=buffer_after)
+                                     buffer_after=buffer_after, save_dir=save_dir)

@@ -117,6 +117,9 @@ class IDDDataset(Dataset):
             else:
                 image = self._get_augmentation()(image)
                 mask = self._get_augmentation()(mask)
+        else:
+            image = self._get_augmentation()(image)
+            mask = self._get_augmentation()(mask)
 
         image = self._preprocess_img()(image)
 

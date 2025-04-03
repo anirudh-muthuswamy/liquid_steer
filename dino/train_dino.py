@@ -10,8 +10,8 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-from IDD_Dataset import IDDDataset
-from dino_unet import UNetResNet50
+from project_src.dino.IDD_Dataset import IDDDataset
+from project_src.dino.dino_unet import UNetResNet50
 from torch.utils.data import DataLoader
 
 def visualize_segmentation(images, masks, outputs):
@@ -45,7 +45,7 @@ def visualize_segmentation(images, masks, outputs):
         plt.show()
 
 def train_validate(model, train_loader, val_loader, optimizer, loss_fn, iou_metric, device, 
-                   epochs=20, current_epoch=0, save_dir = 'code_files/dino_checkpoints/', train_losses = [], val_losses = [],
+                   epochs=20, current_epoch=0, save_dir = 'dino_checkpoints/', train_losses = [], val_losses = [],
                    train_ious = [], val_ious = [], visualize=False, num_visualizations=2):
     
     if not os.path.exists(save_dir):
@@ -58,8 +58,8 @@ def train_validate(model, train_loader, val_loader, optimizer, loss_fn, iou_metr
         
         for _, (images, masks) in tqdm(enumerate(train_loader), 
                                           desc=f'Training {epoch+1}/{epochs}:', total=len(train_loader), ncols=100):
-            images, masks = images.to(device), masks.to(device)
             
+            images, masks = images.to(device), masks.to(device)            
             outputs = model(images)
             
             loss = loss_fn(outputs, masks.squeeze(1))
@@ -77,7 +77,7 @@ def train_validate(model, train_loader, val_loader, optimizer, loss_fn, iou_metr
         train_loss = running_loss / len(train_loader)
         train_iou = running_iou / len(train_loader)
 
-        print(f"Epoch {epoch}: Train Loss = {train_loss:.4f}, Train IoU = {train_iou:.4f}")
+        print(f"Epoch {epoch+1}: Train Loss = {train_loss:.4f}, Train IoU = {train_iou:.4f}")
 
         model.eval()
         running_val_loss = 0.0
@@ -132,36 +132,6 @@ def train_validate(model, train_loader, val_loader, optimizer, loss_fn, iou_metr
         model_path = os.path.join(save_dir, f'model_epoch{epoch+1}.pth')
         torch.save(checkpoint, model_path)
         print(f"Checkpoint saved to {save_dir}\n")
- 
-def validate(model, val_loader, loss_fn, iou_metric, device, visualize=False, num_visualizations=2):
-    model.eval()
-    val_loss = 0.0
-    val_iou = 0.0
-    visualizations_done = 0
- 
-    with torch.no_grad():
-        for i, (images, masks) in tqdm(enumerate(val_loader), total=len(val_loader), ncols=100):
-            images, masks = images.to(device), masks.to(device)
-             
-            outputs = model(images)   
-            loss = loss_fn(outputs, masks.squeeze(1))
- 
-            # Accumulate loss and IoU
-            val_loss += loss.item()
-
-            # Compute IoU
-            preds = torch.argmax(outputs, dim=1)
-            val_iou += iou_metric(preds, masks.squeeze(1)).item()
-             
-            # Visualization logic
-            if visualize and visualizations_done < num_visualizations:
-
-                visualize_segmentation(images, 
-                                        masks, 
-                                        outputs)
-                visualizations_done += 1
- 
-    return val_loss / len(val_loader), val_iou / len(val_loader)
 
 if __name__ == "__main__":
 
@@ -200,7 +170,7 @@ if __name__ == "__main__":
     model = UNetResNet50(num_classes=2).to(device=device)
     
     # define optimizer
-    optimizer = torch.optim.Adam([dict(params=model.parameters(), lr=1e-4,  weight_decay=1e-5)])
+    optimizer = optim.Adam([dict(params=model.parameters(), lr=1e-4,  weight_decay=1e-5)])
 
     if load_from_ckpt:
         model_ckpt = torch.load(checkpoint_path, map_location=device)
