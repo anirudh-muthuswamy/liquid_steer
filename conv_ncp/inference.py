@@ -10,8 +10,8 @@ import torch.backends.cudnn as cudnn
 from torchvision import transforms
 import torch.optim as optim
 import matplotlib.pyplot as plt
-from code_files.conv_ncp.model import ConvNCPModel
-from code_files.conv_ncp.check_data import get_full_image_filepaths
+from model import ConvNCPModel
+from check_data import get_full_image_filepaths
 from torch.utils.data import Sampler, DataLoader
 from collections import OrderedDict
 

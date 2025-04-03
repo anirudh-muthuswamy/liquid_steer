@@ -145,10 +145,11 @@ def create_train_val_loader(train_dataset, val_dataset, train_sampler=None, val_
     return train_loader, val_loader
 
 def get_loaders_for_training(data_dir, steering_angles_path, step_size, filter, turn_threshold, 
-                                     buffer_before, buffer_after, save_dir):
+                                     buffer_before, buffer_after, train_size, save_dir):
+    
     data_preprocessed_pd = get_preprocessed_data_pd(data_dir, steering_angles_path, filter, turn_threshold, 
                                      buffer_before, buffer_after, save_dir)
-    
+
     if filter:
         train_csv_filename = 'train_ncp_data_filtered.csv'
         val_csv_filename = 'val_ncp_data_filtered.csv'
@@ -158,7 +159,8 @@ def get_loaders_for_training(data_dir, steering_angles_path, step_size, filter, 
 
     train_dataset_path, val_dataset_path = df_split_train_val(data_preprocessed_pd, save_dir=save_dir,
                                                               train_csv_filename=train_csv_filename,
-                                                              val_csv_filename=val_csv_filename)
+                                                              val_csv_filename=val_csv_filename,
+                                                              train_size=train_size)
     train_dataset , val_dataset = create_train_val_dataset(train_csv_file = train_dataset_path,
                                                              val_csv_file = val_dataset_path,
                                                              step_size=step_size)
@@ -172,7 +174,8 @@ if __name__ == '__main__':
     steering_angles_txt_path = 'data/sullychen/07012018/data.txt'
     save_dir = 'data/csv_files'
     step_size = 32
-    filter = False
+    train_size = 0.8
+    filter = True
     turn_threshold = 0.06 
     buffer_before = 60 
     buffer_after = 60
@@ -180,4 +183,5 @@ if __name__ == '__main__':
     get_loaders_for_training(data_dir, steering_angles_txt_path, 
                                      step_size=step_size, filter=filter,
                                      turn_threshold=turn_threshold, buffer_before=buffer_before,
-                                     buffer_after=buffer_after, save_dir=save_dir)
+                                     buffer_after=buffer_after, train_size=train_size,
+                                     save_dir=save_dir)

@@ -7,8 +7,7 @@ import os
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from model import ConvNCPModel, WeightedSteeringLoss
-from dataset import (df_split_train_val, create_train_val_dataset, create_train_val_loader)
-from check_data import get_preprocessed_data_pd
+from dataset import create_train_val_dataset, create_train_val_loader
 from argparse import ArgumentParser
 
 def plot_loss_accuracy(train_loss, val_loss):
@@ -72,11 +71,6 @@ def train_validate(train_loader, val_loader, optimizer, model, criterion, train_
         print(f"Validation Loss: {total_val_loss / len(val_loader)}")
 
         this_run_epoch += 1
-
-        print('save_every:', save_every)
-        print('this_run_epoch:', this_run_epoch)
-        print('save_every % this_run_epoch', this_run_epoch %  save_every)
-
         if this_run_epoch % save_every  == 0:
 
             checkpoint = {
@@ -94,6 +88,12 @@ def train_validate(train_loader, val_loader, optimizer, model, criterion, train_
 
     return model_path
 
+def init_weights_he(m):
+    if isinstance(m, (nn.Linear, nn.Conv2d)):
+        nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='relu')
+        if m.bias is not None:
+            nn.init.zeros_(m.bias)
+
 def create_parser():
     parser = ArgumentParser(description='Training parameters for the model')
     
@@ -109,8 +109,6 @@ def create_parser():
                         help='Path to the training dataset CSV')
     parser.add_argument('--val_dataset_path', type=str, default='data/csv_files/val_ncp_data_filtered.csv',
                         help='Path to the validation dataset CSV')
-    parser.add_argument('--train_size', type=float, default=0.8,
-                        help='Proportion of data to use for training')
     parser.add_argument('--seq_len', type=int, default=32,
                         help='Sequence length')
     parser.add_argument('--step_size', type=int, default=32,
@@ -164,7 +162,6 @@ if __name__ == '__main__':
     val_dataset_path = args.val_dataset_path
 
     train_params = {
-    'train_size': args.train_size,
     'seq_len': args.seq_len,
     'step_size': args.step_size,
     'imgw': args.imgw,
@@ -192,6 +189,7 @@ if __name__ == '__main__':
     model = ConvNCPModel(num_filters=8, features_per_filter=4, inter_neurons = 12, command_neurons = 6,
                      motor_neurons = 1, sensory_fanout = 6, inter_fanout = 4, 
                      recurrent_command_synapses = 6, motor_fanin = 6, seed = 20190120) 
+    model.apply(init_weights_he)
     model = model.to(device)
 
     # Define loss function and optimizer
