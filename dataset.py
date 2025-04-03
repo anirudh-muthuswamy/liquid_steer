@@ -44,7 +44,7 @@ def calculate_mean_and_std(dataset_path):
     return mean, std
 
 class CustomDataset(Dataset):
-    def __init__(self, csv_file, seq_len, imgh, imgw, transform=None):
+    def __init__(self, csv_file, seq_len, imgh=224, imgw=224, step_size=1, transform=None):
         """
         Dataset that extracts continuous sequences from the given DataFrame.
 
@@ -55,8 +55,9 @@ class CustomDataset(Dataset):
         self.df = pd.read_csv(csv_file)
         self.seq_len = seq_len
         self.transform = transform
-        self.imgh = 224
-        self.imgw = 224
+        self.imgh = imgh
+        self.imgw = imgw
+        self.step_size = step_size
 
         # Group by sequence_id and collect valid sequences
         self.sequences = OrderedDict({})
@@ -64,15 +65,15 @@ class CustomDataset(Dataset):
         # for each sequence id
         for seq_id in self.df["sequence_id"].unique():
             seq_data = self.df[self.df["sequence_id"] == seq_id]
-            num_sequences = max(len(seq_data) - seq_len + 1, 0)
+            num_sequences = max((len(seq_data) - self.seq_len)//self.step_size + 1, 0)
             num_sequences_total += num_sequences
-            # for each sequence of len=seq_len for that sequence_id
-            for i in range(len(seq_data) - seq_len + 1):  # Only full sequences
-                self.sequences[(seq_id,i)] = (seq_data.iloc[i : i + seq_len])
+            # for each sequence of len=self.seq_len for that sequence_id
+            for i in range(0,len(seq_data) - self.seq_len + 1, self.step_size):  # Only full sequences
+                self.sequences[(seq_id,i)] = (seq_data.iloc[i : i + self.seq_len])
 
         self.index_map = {key: i for i, key in enumerate(self.sequences.keys())}
 
-        print(f"Total sequences extracted: {len(self.sequences)}")
+        print(f"Total sequences extracted: {len(self.sequences)} using step_size={self.step_size} and seq_len={self.seq_len}")
 
     def get_ith_element(self, od, i):
         return next(islice(od.items(), i, None))
@@ -105,9 +106,10 @@ class CustomDataset(Dataset):
     
 def create_train_val_dataset(train_csv_file, 
                               val_csv_file,
-                              seq_len = 64, 
+                              seq_len = 32, 
                               imgw = 224,
                               imgh = 224,
+                              step_size = 32,
                               mean=[0.485, 0.456, 0.406],
                               std=[0.229, 0.224, 0.225]):
     
@@ -117,9 +119,9 @@ def create_train_val_dataset(train_csv_file,
     ])
 
     train_dataset = CustomDataset(csv_file=train_csv_file, seq_len=seq_len,imgh = imgh, imgw=imgw,
-                                  transform=transform)
+                                  step_size=step_size,transform=transform)
     val_dataset = CustomDataset(csv_file=val_csv_file, seq_len=seq_len,imgh = imgh, imgw=imgw,
-                                transform=transform)
+                                step_size=step_size,transform=transform)
 
     return train_dataset, val_dataset
 
@@ -140,12 +142,15 @@ def create_train_val_loader(train_dataset, val_dataset, train_sampler=None, val_
 
     return train_loader, val_loader
 
-def get_default_loaders_for_training(data_dir, steering_angles_path):
-    data_preprocessed_pd = get_preprocessed_data_pd(data_dir, steering_angles_path)
+def get_default_loaders_for_training(data_dir, steering_angles_path, step_size, filter, turn_threshold, 
+                                     buffer_before, buffer_after):
+    data_preprocessed_pd = get_preprocessed_data_pd(data_dir, steering_angles_path, filter, turn_threshold, 
+                                     buffer_before, buffer_after)
 
     train_dataset_path, val_dataset_path = df_split_train_val(data_preprocessed_pd)
     train_dataset , val_dataset = create_train_val_dataset(train_csv_file = train_dataset_path,
-                                                             val_csv_file = val_dataset_path)
+                                                             val_csv_file = val_dataset_path,
+                                                             step_size=step_size)
     train_loader, val_loader = create_train_val_loader(train_dataset, val_dataset)
 
     return train_loader, val_loader
@@ -154,5 +159,13 @@ if __name__ == '__main__':
 
     data_dir = 'sullychen/07012018/data'
     steering_angles_txt_path = 'sullychen/07012018/data.txt'
+    step_size = 32
+    filter = True
+    turn_threshold = 0.06 
+    buffer_before = 60 
+    buffer_after = 60
 
-    get_default_loaders_for_training(data_dir, steering_angles_txt_path)
+    get_default_loaders_for_training(data_dir, steering_angles_txt_path, 
+                                     step_size=step_size, filter=filter,
+                                     turn_threshold=turn_threshold, buffer_before=buffer_before,
+                                     buffer_after=buffer_after)

@@ -1,6 +1,7 @@
 import pandas as pd
 import re
 import cv2
+from datetime import datetime
 import matplotlib.pyplot as plt
 import os
 
@@ -19,11 +20,14 @@ def get_steering_angles(path):
     lines = file.readlines()
     #change this to line[:-1] if using kaggle dataset else keep the same for sullychen dataset
     steering_angles = [(line[:-1]).split(' ')[1].split(',')[0] for line in lines]
+    timestamps = [line.strip().split(' ', 1)[1].split(',')[1] for line in lines]
 
-    return steering_angles
+    return [steering_angles, timestamps]
 
-def convert_to_df(full_filepaths, steering_angles):
-    data = pd.DataFrame({'filepath':full_filepaths,'steering_angle':steering_angles})
+def convert_to_df(full_filepaths, steering_angles, timestamps):
+    data = pd.DataFrame({'filepath':full_filepaths,'steering_angle':steering_angles, 'timestamps':timestamps})
+    data['parsed_timestamp'] = data['timestamps'].apply(lambda x: datetime.strptime(x, '%Y-%m-%d %H:%M:%S:%f'))
+    data = data.drop('timestamps', axis=1)
     data = data.reset_index(drop=True)
     data['steering_angle'] = data['steering_angle'].astype('float')
     #normalize steering angles to -1,1 based on actual steering range (-360, 360) of wheel
@@ -102,9 +106,9 @@ def disp_start_and_end_in_filtered_data(data_pd_filtered):
 
 def filter_df_on_turns(data_pd, turn_threshold = 0.06, buffer_before = 60, buffer_after = 60):
     # Parameters
-    turn_threshold = 0.06  # Define turn threshold (absolute value)
-    buffer_before = 60     # Frames to include before a turn
-    buffer_after = 60     # Frames to include after a turn
+    turn_threshold = turn_threshold  # Define turn threshold (absolute value)
+    buffer_before = buffer_before    # Frames to include before a turn
+    buffer_after = buffer_after     # Frames to include after a turn
 
     # Load your dataset (assuming it's a DataFrame named df)
     data_pd['index'] = data_pd.index  # Preserve original ordering if needed
@@ -140,9 +144,6 @@ def filter_df_on_turns(data_pd, turn_threshold = 0.06, buffer_before = 60, buffe
     # Drop temporary columns
     data_pd_filtered = data_pd_filtered.drop(columns=['turning', 'turn_shift'])
 
-    # Save or visualize
-    data_pd_filtered.to_csv("filtered_steering_data.csv", index=False)
-
     # Detect sequence breaks (where the original index is not continuous)
     data_pd_filtered["sequence_id"] = (data_pd_filtered["index"].diff() != 1).cumsum()
 
@@ -162,23 +163,52 @@ def group_data_by_sequences(data_pd_filtered):
 
     print(f"Total valid sequences: {len(valid_sequences)}")
 
+    # Save or visualize
+    data_pd_filtered.to_csv("filtered_steering_data.csv", index=False)
+
     return data_pd_filtered
 
-def get_preprocessed_data_pd(data_dir, steering_angles_txt_path):
+def get_preprocessed_data_pd(data_dir, steering_angles_txt_path, filter = True,
+                             turn_threshold = 0.06, buffer_before = 60, buffer_after = 60):
     img_paths = get_full_image_filepaths(data_dir)
-    steering_angles = get_steering_angles(steering_angles_txt_path)
+    steering_angles, timestamps = get_steering_angles(steering_angles_txt_path)
 
-    data_pd = convert_to_df(img_paths, steering_angles)
-    data_pd_filtered = filter_df_on_turns(data_pd)
-    data_pd_filtered = group_data_by_sequences(data_pd_filtered)
+    data_pd = convert_to_df(img_paths, steering_angles, timestamps)
+    if filter:
+        data_pd_filtered = filter_df_on_turns(data_pd, turn_threshold = turn_threshold, 
+                                              buffer_before = buffer_before, buffer_after = buffer_after)
+        data_pd_filtered = group_data_by_sequences(data_pd_filtered)
 
-    return data_pd_filtered
+        return data_pd_filtered
+    
+    sequence_id = 0
+    sequence_ids = [sequence_id]
+
+    # Iterate through rows to calculate time differences (if greater than 3 seconds 
+    # or not) and assign sequence IDs
+    for i in range(1, len(data_pd)):
+        time_diff = (data_pd['parsed_timestamp'][i] - data_pd['parsed_timestamp'][i-1]).total_seconds()
+        if time_diff > 3:
+            sequence_id += 1
+        sequence_ids.append(sequence_id)
+
+    # Add sequence_id column to DataFrame
+    data_pd['sequence_id'] = sequence_ids
+
+    data_pd.to_csv("filtered_steering_data.csv", index=False)
+    
+    return data_pd
 
 if __name__ == '__main__':
 
     data_dir = 'sullychen/07012018/data'
     steering_angles_txt_path = 'sullychen/07012018/data.txt'
+    filter = True
+    turn_threshold = 0.06 
+    buffer_before = 60 
+    buffer_after = 60
 
-    data_preprocessed_pd = get_preprocessed_data_pd(data_dir, steering_angles_txt_path)
+    data_preprocessed_pd = get_preprocessed_data_pd(data_dir, steering_angles_txt_path, filter,
+                                                    turn_threshold, buffer_before, buffer_after)
 
     print(data_preprocessed_pd.head(5))
