@@ -4,6 +4,24 @@ from ncps.wirings import NCP
 from ncps.torch import LTC
 import torch.nn.functional as F
 
+class WeightedSteeringLoss(nn.Module):
+    def __init__(self, alpha=0.1):
+        super(WeightedSteeringLoss, self).__init__()
+        self.alpha = alpha
+        
+    def forward(self, predictions, targets):
+        # Calculate the squared error
+        squared_error = (predictions - targets)**2
+        
+        # Calculate the weighting factor: w(y) = exp(|y|*alpha)
+        weights = torch.exp(torch.abs(targets) * self.alpha)
+        
+        # Apply the weights to the squared error
+        weighted_loss = squared_error * weights
+        
+        # Return the mean of the weighted loss
+        return weighted_loss.mean()
+
 class convolutional_head(nn.Module):
     def __init__(self, num_filters = 8, features_per_filter = 4):
         super(convolutional_head, self).__init__()
@@ -58,12 +76,12 @@ class convolutional_head(nn.Module):
         return feature_layer
     
 
-class NCPModel(nn.Module):
+class ConvNCPModel(nn.Module):
     def __init__(self, num_filters=8, features_per_filter=4, 
                  inter_neurons = 12, command_neurons = 6, motor_neurons = 1, 
                  sensory_fanout = 6, inter_fanout = 4, recurrent_command_synapses = 6,
                  motor_fanin = 6, seed = 20190120):
-        super(NCPModel, self).__init__()
+        super(ConvNCPModel, self).__init__()
 
         # Define NCP wiring based on CommandLayerWormnetArchitectureMK2 parameters
         wiring = NCP(
