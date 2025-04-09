@@ -6,7 +6,7 @@ import torch.backends.cudnn as cudnn
 import os
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-from model import ConvNCPModel, WeightedSteeringLoss
+from model import ConvNCPModel, WeightedMSE
 from dataset import create_train_val_dataset, create_train_val_loader
 from argparse import ArgumentParser
 
@@ -193,7 +193,7 @@ if __name__ == '__main__':
     model = model.to(device)
 
     # Define loss function and optimizer
-    criterion = WeightedSteeringLoss(alpha=0.1)
+    criterion = WeightedMSE(alpha=0.1)
     optimizer = optim.Adam([
     # Convolutional head
     {'params': model.conv_head.parameters(), 'lr': train_params['conv_head_lr']},

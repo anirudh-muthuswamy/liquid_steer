@@ -4,9 +4,9 @@ from ncps.wirings import NCP
 from ncps.torch import LTC
 import torch.nn.functional as F
 
-class WeightedSteeringLoss(nn.Module):
+class WeightedMSE(nn.Module):
     def __init__(self, alpha=0.1):
-        super(WeightedSteeringLoss, self).__init__()
+        super(WeightedMSE, self).__init__()
         self.alpha = alpha
         
     def forward(self, predictions, targets):
