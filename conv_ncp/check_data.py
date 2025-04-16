@@ -149,7 +149,7 @@ def filter_df_on_turns(data_pd, turn_threshold = 0.06, buffer_before = 60, buffe
 
     return data_pd_filtered
 
-def group_data_by_sequences(data_pd_filtered, save_dir):
+def group_data_by_sequences(data_pd_filtered):
     sequence_lengths = data_pd_filtered.groupby("sequence_id").size()
 
     print(f"Minimum sequence length: {min(sequence_lengths)}")
@@ -163,11 +163,6 @@ def group_data_by_sequences(data_pd_filtered, save_dir):
 
     print(f"Total valid sequences: {len(valid_sequences)}")
 
-    # Save or visualize
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
-    data_pd_filtered.to_csv(os.path.join(save_dir,"filtered_ncp_steering_data.csv"), index=False)
-
     return data_pd_filtered
 
 def get_preprocessed_data_pd(data_dir, steering_angles_txt_path, filter = True,
@@ -177,29 +172,39 @@ def get_preprocessed_data_pd(data_dir, steering_angles_txt_path, filter = True,
     steering_angles, timestamps = get_steering_angles(steering_angles_txt_path)
 
     data_pd = convert_to_df(img_paths, steering_angles, timestamps, norm)
-    if filter:
+    if filter and norm:
         data_pd_filtered = filter_df_on_turns(data_pd, turn_threshold = turn_threshold, 
-                                              buffer_before = buffer_before, buffer_after = buffer_after)
-        data_pd_filtered = group_data_by_sequences(data_pd_filtered, save_dir)
+                                            buffer_before = buffer_before, buffer_after = buffer_after)
+        data_pd_filtered = group_data_by_sequences(data_pd_filtered)
+
+        # Save
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+        data_pd_filtered.to_csv(os.path.join(save_dir,f"flt_ncp_tt_{turn_threshold}_bb_{buffer_before}_ba_{buffer_after}.csv"), index=False)
 
         return data_pd_filtered
     
-    sequence_id = 0
-    sequence_ids = [sequence_id]
+    elif filter and not norm:
+        print('Error: If filtering, then steering values should be normalized (-1, 1), set norm to True')
+        exit(1)
 
-    # Iterate through rows to calculate time differences (if greater than 3 seconds 
-    # or not) and assign sequence IDs
-    for i in range(1, len(data_pd)):
-        time_diff = (data_pd['parsed_timestamp'][i] - data_pd['parsed_timestamp'][i-1]).total_seconds()
-        if time_diff > 3:
-            sequence_id += 1
-        sequence_ids.append(sequence_id)
+    else:
+        sequence_id = 0
+        sequence_ids = [sequence_id]
 
-    # Add sequence_id column to DataFrame
-    data_pd['sequence_id'] = sequence_ids
+        # Iterate through rows to calculate time differences (if greater than 3 seconds 
+        # or not) and assign sequence IDs
+        for i in range(1, len(data_pd)):
+            time_diff = (data_pd['parsed_timestamp'][i] - data_pd['parsed_timestamp'][i-1]).total_seconds()
+            if time_diff > 3:
+                sequence_id += 1
+            sequence_ids.append(sequence_id)
 
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
-    data_pd.to_csv(os.path.join(save_dir,"ncp_steering_data.csv"), index=False)
-    
-    return data_pd
+        # Add sequence_id column to DataFrame
+        data_pd['sequence_id'] = sequence_ids
+
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+        data_pd.to_csv(os.path.join(save_dir,f"ncp_tt_{turn_threshold}_bb_{buffer_before}_ba_{buffer_after}.csv"), index=False)
+        
+        return data_pd
