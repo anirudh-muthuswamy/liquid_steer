@@ -24,15 +24,15 @@ def get_steering_angles(path):
 
     return [steering_angles, timestamps]
 
-def convert_to_df(full_filepaths, steering_angles, timestamps):
+def convert_to_df(full_filepaths, steering_angles, timestamps, norm=True):
     data = pd.DataFrame({'filepath':full_filepaths,'steering_angle':steering_angles, 'timestamps':timestamps})
     data['parsed_timestamp'] = data['timestamps'].apply(lambda x: datetime.strptime(x, '%Y-%m-%d %H:%M:%S:%f'))
     data = data.drop('timestamps', axis=1)
     data = data.reset_index(drop=True)
     data['steering_angle'] = data['steering_angle'].astype('float')
     #normalize steering angles to -1,1 based on actual steering range (-360, 360) of wheel
-    data['steering_angle'] = data['steering_angle'] / 360
-
+    if norm == True:
+        data['steering_angle'] = data['steering_angle'] / 360
     return data
 
 def display_images_with_angles(data_pd, steering_wheel_img):
@@ -172,11 +172,11 @@ def group_data_by_sequences(data_pd_filtered, save_dir):
 
 def get_preprocessed_data_pd(data_dir, steering_angles_txt_path, filter = True,
                              turn_threshold = 0.06, buffer_before = 60, buffer_after = 60,
-                             save_dir = 'data/csv_files'):
+                             norm=True, save_dir = 'data/csv_files'):
     img_paths = get_full_image_filepaths(data_dir)
     steering_angles, timestamps = get_steering_angles(steering_angles_txt_path)
 
-    data_pd = convert_to_df(img_paths, steering_angles, timestamps)
+    data_pd = convert_to_df(img_paths, steering_angles, timestamps, norm)
     if filter:
         data_pd_filtered = filter_df_on_turns(data_pd, turn_threshold = turn_threshold, 
                                               buffer_before = buffer_before, buffer_after = buffer_after)
@@ -203,19 +203,3 @@ def get_preprocessed_data_pd(data_dir, steering_angles_txt_path, filter = True,
     data_pd.to_csv(os.path.join(save_dir,"ncp_steering_data.csv"), index=False)
     
     return data_pd
-
-if __name__ == '__main__':
-
-    data_dir = 'data/sullychen/07012018/data'
-    steering_angles_txt_path = 'data/sullychen/07012018/data.txt'
-    save_dir = 'data/csv_files'
-    filter = True
-    turn_threshold = 0.06 
-    buffer_before = 60 
-    buffer_after = 60
-
-    data_preprocessed_pd = get_preprocessed_data_pd(data_dir, steering_angles_txt_path, filter,
-                                                    turn_threshold, buffer_before, buffer_after,
-                                                    save_dir=save_dir)
-
-    print(data_preprocessed_pd.head(5))
