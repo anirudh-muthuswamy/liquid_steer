@@ -10,42 +10,37 @@ class WeightedMSE(nn.Module):
         self.alpha = alpha
         
     def forward(self, predictions, targets):
-        # Calculate the squared error
+        # squared error
         squared_error = (predictions - targets)**2
         
-        # Calculate the weighting factor: w(y) = exp(|y|*alpha)
+        # weighting factor: w(y) = exp(|y|*alpha)
         weights = torch.exp(torch.abs(targets) * self.alpha)
-        
-        # Apply the weights to the squared error
         weighted_loss = squared_error * weights
-        
-        # Return the mean of the weighted loss
+
         return weighted_loss.mean()
 
 class convolutional_head(nn.Module):
-    def __init__(self, num_filters = 8, features_per_filter = 4):
+    def __init__(self, num_filters = 8, features_per_filter = 16):
         super(convolutional_head, self).__init__()
 
         self.num_filters = num_filters
         self.features_per_filter = features_per_filter
 
-        self.conv_layers = nn.Sequential(
-            nn.Conv2d(3, 24, kernel_size=5, stride=2, padding=2),
-            nn.ReLU(),
-            nn.Conv2d(24, 36, kernel_size=5, stride=2, padding=2),
-            nn.ReLU(),
-            nn.Conv2d(36, 48, kernel_size=3, stride=2, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(48, 64, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(64, num_filters, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-        )
+        self.conv1 = nn.Conv2d(3, 24, kernel_size=5, stride=2, padding=2)
+        self.conv2 = nn.Conv2d(24, 36, kernel_size=5, stride=2, padding=2)
+        self.conv3 = nn.Conv2d(36, 48, kernel_size=3, stride=2, padding=1)
+        self.conv4 = nn.Conv2d(48, 64, kernel_size=3, stride=1, padding=1)
+        self.conv5 = nn.Conv2d(64, num_filters, kernel_size=3, stride=1, padding=1)
 
-        # Fully Connected Layers to extract features per filter
+        self.relu = nn.ReLU()
+
+        # FC to extract features per filter
         self.fc_layers = nn.ModuleList([
             nn.Linear(28 * 28, features_per_filter) for _ in range(num_filters)
         ])
+
+        self.activations = []
+        self.feature_layer = None
 
     def forward(self, x):
         """
@@ -54,26 +49,74 @@ class convolutional_head(nn.Module):
         :param x: Input tensor of shape [batch, channels, height, width]
         :return: Feature vector of shape [batch, num_filters * features_per_filter]
         """
+
+        self.activations = []
         batch_size = x.shape[0]
 
-        # Apply convolutional layers
-        x = self.conv_layers(x)  # Shape: [batch, num_filters, height, width] -> [512, 8, 28, 28] for seq len of 64 and batch size of 8
+        # apply conv layers
+        # [batch, num_filters, height, width] -> [512, 8, 28, 28] for seq len of 64 and batch size of 8
 
-        # Extract individual filter outputs
-        filter_outputs = torch.split(x, 1, dim=1)  # Splitting along channel dimension -> len of 8 for num_filters = 8
+        x = self.relu(self.conv1(x)); self.activations.append(x)
+        x = self.relu(self.conv2(x)); self.activations.append(x)
+        x = self.relu(self.conv3(x)); self.activations.append(x)
+        x = self.relu(self.conv4(x)); self.activations.append(x)
+        x = self.relu(self.conv5(x)); self.activations.append(x)
+
+        # individual filter outputs
+        filter_outputs = torch.split(x, 1, dim=1)  # splitting along channel dimension -> len of 8 for num_filters = 8
         #shape of a single filter_output -> [512, 1, 28, 28]
 
         feature_vectors = []
         for i in range(self.num_filters):
-            filter_out = filter_outputs[i].view(batch_size, -1)  # Flatten each filter output -> shape of: [512, 784]
-            feature_vec = F.relu(self.fc_layers[i](filter_out))  # Apply FC layer -> shape of: [512, 4]
+            filter_out = filter_outputs[i].view(batch_size, -1)  # flatten each filter output -> shape of: [512, 784]
+            feature_vec = F.relu(self.fc_layers[i](filter_out))  # apply FC layer -> shape of: [512, 4]
             feature_vectors.append(feature_vec)
 
-        # Concatenate feature vectors
-        feature_layer = torch.cat(feature_vectors, dim=1)  # Shape: [batch, num_filters * features_per_filter]
-        # shape of:[512, 32]
+        # concat feature vectors
+        feature_layer = torch.cat(feature_vectors, dim=1)  # [batch, num_filters * features_per_filter]
+        # [512, 32]
+        self.feature_layer = feature_layer
 
         return feature_layer
+    
+    def visual_backprop(self, idx=0):
+        """
+        VisualBackprop-like mask computation using torch (GPU compatible).
+        Returns: [H, W] attention mask (still returned as a CPU numpy array).
+        """
+        # mean maps for each layer
+        means = []
+
+        for layer_act in self.activations:
+            # [B, C, H, W] -> one sample
+            a = layer_act[idx]  # [C, H, W]
+            a = a.float()
+            per_channel_max = torch.amax(torch.amax(a, dim=1), dim=1) + 1e-6  # [C]
+            norm = a / per_channel_max[:, None, None]  # [C, H, W]
+            mean_map = norm.mean(dim=0)  # [H, W]
+            means.append(mean_map)
+
+        # feature-level activation mask
+        feat_layer = self.feature_layer[idx]  # [num_filters * features_per_filter]
+        feat_layer = torch.abs(feat_layer).view(self.num_filters, self.features_per_filter)  # [F, P]
+        feat_mask = feat_layer.mean(dim=1)  # [F]
+        feat_mask = feat_mask / (feat_mask.max() + 1e-6)
+
+        # applies a rough weighting on last activation map
+        mask = means[-1] * feat_mask.mean()  # [H, W]
+
+        # backward pass through mean activations (resize each to next layer size)
+        for i in range(len(means) - 2, -1, -1):
+            larger = means[i]  # [H, W]
+            smaller = F.interpolate(mask.unsqueeze(0).unsqueeze(0), size=larger.shape, mode='bilinear', align_corners=False)
+            smaller = smaller.squeeze()
+            mask = larger * smaller
+
+        # normalize and move to cpu
+        mask = mask - mask.min()
+        mask = mask / (mask.max() + 1e-6)
+        return mask.detach().cpu().numpy()
+
     
 class ConvNCPModel(nn.Module):
     def __init__(self, num_filters=8, features_per_filter=4, 
@@ -82,7 +125,7 @@ class ConvNCPModel(nn.Module):
                  motor_fanin = 6, seed = 20190120):
         super(ConvNCPModel, self).__init__()
 
-        # Define NCP wiring based on CommandLayerWormnetArchitectureMK2 parameters
+        # Define NCP wiring based on CommandLayerWormnetArchitecture parameters (from NCP Paper)
         wiring = NCP(
             inter_neurons=inter_neurons,   # Number of interneurons
             command_neurons=command_neurons,  # Number of command neurons
@@ -96,14 +139,13 @@ class ConvNCPModel(nn.Module):
 
         self.conv_head = convolutional_head(num_filters, features_per_filter)
 
-        # Define the LTC with the correct input size
         self.ltc = LTC(
-            input_size=num_filters * features_per_filter,  # This should match the Convolutional Head output
+            input_size=num_filters * features_per_filter,  # should match the conv head output
             units=wiring,
             return_sequences=True
         )
 
-        # Fully connected layer to map motor neuron output to a steering angle
+        # FC layer to map motor neuron output to a steering angle
         self.fc_out = nn.Linear(wiring.output_dim, 1)
 
     def forward(self, x):
@@ -114,18 +156,18 @@ class ConvNCPModel(nn.Module):
         """
         batch_size, seq_len, c, h, w = x.size()
 
-        # Flatten batch and sequence for convolutional processing
+        # flatten batch and sequence for cnn processing
         x = x.view(batch_size * seq_len, c, h, w)
 
-        # Extract features using Convolutional Head
-        features = self.conv_head(x)  # Shape: [batch * seq_len, feature_dim]
+        # extract features using conv head
+        features = self.conv_head(x)  # [batch * seq_len, feature_dim]
 
-        # Reshape back to [batch, seq_len, feature_dim] for LTC
+        # back to [batch, seq_len, feature_dim] for LTC
         features = features.view(batch_size, seq_len, -1)
 
-        # Pass through LTC
-        outputs, _ = self.ltc(features) # shape of -> [batch, seq_len, 1]
+        # forward pass through LTC
+        outputs, _ = self.ltc(features) # [batch, seq_len, 1]
 
-        # Map NCP output to steering angle
-        predictions = self.fc_out(outputs) # shape of -> [batch, seq_len, 1]
-        return predictions.squeeze(-1)  # Shape: [batch, seq_len]
+        # map NCP output to steering angle
+        predictions = self.fc_out(outputs) # [batch, seq_len, 1]
+        return predictions.squeeze(-1)  # [batch, seq_len]
