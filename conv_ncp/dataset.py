@@ -157,7 +157,7 @@ def create_train_val_loader(train_dataset, val_dataset, train_sampler=None, val_
 
 def get_loaders_for_training(data_dir, steering_angles_path, step_size, seq_len, imgh, imgw, filter, turn_threshold, 
                                      buffer_before, buffer_after, crop=True, train_size=0.8, save_dir='data/csv_files', 
-                                     norm=True, batch_size=16, num_workers=4, prefetch_factor=4, pin_memory=True):
+                                     norm=True, batch_size=16, num_workers=4, prefetch_factor=4, pin_memory=True, train_shuffle=False):
     
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
@@ -190,7 +190,8 @@ def get_loaders_for_training(data_dir, steering_angles_path, step_size, seq_len,
                                                        batch_size=batch_size, 
                                                        num_workers=num_workers, 
                                                        prefetch_factor=prefetch_factor,
-                                                       pin_memory=pin_memory)
+                                                       pin_memory=pin_memory, 
+                                                       train_shuffle=train_shuffle)
 
     return train_loader, val_loader
 
@@ -220,12 +221,14 @@ if __name__ == '__main__':
     prefetch_factor = 2
     num_workers=4
     pin_memory=True
+    train_shuffle=False
 
     get_loaders_for_training(
         #preprocessing args:
-        data_dir, steering_angles_txt_path, save_dir=save_dir, filter=filter, norm=norm,
+        data_dir, steering_angles_path=steering_angles_txt_path, save_dir=save_dir, filter=filter, norm=norm,
         turn_threshold=turn_threshold, buffer_before=buffer_before, buffer_after=buffer_after, train_size=train_size,
         #dataset args:
         imgh=imgh, imgw=imgw, step_size=step_size, seq_len=seq_len, crop=crop, 
         #dataloader args:
-        batch_size=batch_size, prefetch_factor=prefetch_factor, num_workers=num_workers, pin_memory=pin_memory)
+        batch_size=batch_size, prefetch_factor=prefetch_factor, num_workers=num_workers, pin_memory=pin_memory,
+        train_shuffle=train_shuffle)

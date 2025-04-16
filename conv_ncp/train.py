@@ -4,13 +4,15 @@ import torch.optim as optim
 import torch.backends.mps as mps
 import torch.backends.cudnn as cudnn
 import os
+import numpy as np
+import cv2
+import json
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from model import ConvNCPModel, WeightedMSE
-from dataset import create_train_val_dataset, create_train_val_loader
-from argparse import ArgumentParser
+from dataset import get_loaders_for_training
 
-def plot_loss_accuracy(train_loss, val_loss):
+def plot_loss_accuracy(train_loss, val_loss, save_dir=None):
     epochs = range(1, len(train_loss) + 1)
 
     plt.figure(figsize=(12, 6))
@@ -24,13 +26,56 @@ def plot_loss_accuracy(train_loss, val_loss):
     plt.legend()
     plt.title('Loss vs Epochs')
     plt.tight_layout()
-    plt.show()
+    if save_dir:
+        plt.savefig(save_dir, bbox_inches='tight')
+        plt.close()
+    else:
+        plt.show()
+
+def overlay_visual_backprop(input_tensor, mask, save_path=None, alpha=0.1):
+    """
+    Overlays the visual backprop mask on the original input image.
+
+    Args:
+        input_tensor: [3, H, W] torch.Tensor (before batch dimension), normalized
+        mask: [H, W] numpy array, already normalized [0, 1]
+        save_path: optional path to save overlay image
+        alpha: blending factor (heatmap vs original)
+    """
+    #denormalize image (undo mean/std normalization)
+    mean = np.array([0.485, 0.456, 0.406])
+    std = np.array([0.229, 0.224, 0.225])
+    img = input_tensor.clone().detach().cpu().numpy() 
+    img = img * std[:, None, None] + mean[:, None, None]
+    img = np.clip(img, 0, 1)
+    img = np.transpose(img, (1, 2, 0))  # -> [H, W, 3]
+
+    if mask.shape != img.shape[:2]:
+        mask = cv2.resize(mask, (img.shape[1], img.shape[0]))
+
+    #colormap to mask and overlay
+    heatmap = cv2.applyColorMap(np.uint8(255 * mask), cv2.COLORMAP_JET)
+    heatmap = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB) / 255.0
+    overlayed = (1 - alpha) * img + alpha * heatmap
+    overlayed = np.clip(overlayed, 0, 1)
+
+    plt.imshow(overlayed)
+    plt.axis('off')
+    if save_path:
+        plt.savefig(save_path, bbox_inches='tight')
+        plt.close()
+    else:
+        plt.show()
 
 def train_validate(train_loader, val_loader, optimizer, model, criterion, train_params, current_epoch=0, epochs=10, 
                    save_dir = 'checkpoints/', training_losses = [], validation_losses = [], save_every=10):
 
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
+
+    backprop_save_dir = os.path.join(save_dir,'backprops')
+    if not os.path.exists(backprop_save_dir):
+        os.makedirs(backprop_save_dir)
 
     this_run_epoch = 0
     for epoch in range(current_epoch, epochs): 
@@ -69,6 +114,22 @@ def train_validate(train_loader, val_loader, optimizer, model, criterion, train_
         validation_losses.append(total_val_loss/ len(val_loader))
 
         print(f"Validation Loss: {total_val_loss / len(val_loader)}")
+        
+        # visualbackprop dump
+        with torch.no_grad():
+            model.eval()
+            batch = next(iter(train_loader))
+            _, _, batch_x, _ = batch
+            batch_x = batch_x.to(device)
+
+            B, T, C, H, W = batch_x.shape
+            x_flat = batch_x.view(B*T, C, H, W)
+
+            _ = model.conv_head(x_flat)  # intermediate activations
+            vis_mask = model.conv_head.visual_backprop(idx=0)
+            input_image = x_flat[0]  # one image: shape [3, H, W]
+            overlay_visual_backprop(input_image, vis_mask, save_path=f'{backprop_save_dir}/epoch_{epoch+1}.png', alpha=0.5)
+            plt.close()
 
         this_run_epoch += 1
         if this_run_epoch % save_every  == 0:
@@ -94,48 +155,10 @@ def init_weights_he(m):
         if m.bias is not None:
             nn.init.zeros_(m.bias)
 
-def create_parser():
-    parser = ArgumentParser(description='Training parameters for the model')
-    
-    # Data related parameters
-    parser.add_argument('--load_from_ckpt', action='store_true', default=False,
-                        help='Whether to load from checkpoint')
-    parser.add_argument('--save_dir', type=str, default='checkpoints/conv_ncp/sl_32_ss_32_bs16_weighted',
-                        help='Directory to save checkpoints')
-    parser.add_argument('--checkpoint_path', type=str, 
-                        default='checkpoints/conv_ncp/sl_32_ss_32_bs16_weighted/model_epoch10.pth',
-                        help='Path to the checkpoint to load from')
-    parser.add_argument('--train_dataset_path', type=str, default='data/csv_files/train_ncp_data_filtered.csv',
-                        help='Path to the training dataset CSV')
-    parser.add_argument('--val_dataset_path', type=str, default='data/csv_files/val_ncp_data_filtered.csv',
-                        help='Path to the validation dataset CSV')
-    parser.add_argument('--seq_len', type=int, default=32,
-                        help='Sequence length')
-    parser.add_argument('--step_size', type=int, default=32,
-                        help='Step size')
-    parser.add_argument('--imgw', type=int, default=224,
-                        help='Image width')
-    parser.add_argument('--imgh', type=int, default=224,
-                        help='Image height')
-    parser.add_argument('--mean', type=float, nargs=3, 
-                        default=[0.543146, 0.53002986, 0.50673143],
-                        help='Mean values for normalization')
-    parser.add_argument('--std', type=float, nargs=3, 
-                        default=[0.23295668, 0.22123158, 0.22100357],
-                        help='Standard deviation values for normalization')
-    parser.add_argument('--batch_size', type=int, default=16,
-                        help='Batch size')
-    parser.add_argument('--shuffle', action='store_true', default=False,
-                        help='Whether to shuffle the data')
-    
-    # Optimizer parameters
-    parser.add_argument('--conv_head_lr', type=float, default=2.5e-5,
-                        help='Learning rate for convolutional head')
-    parser.add_argument('--ncp_lr', type=float, default=1e-3,
-                        help='Learning rate for NCP')
-    parser.add_argument('--optim_betas', type=float, nargs=2, default=(0.9, 0.999),
-                        help='Beta parameters for Adam optimizer')
-    return parser
+def load_config(config_path='./project_src/conv_ncp_config.json'):
+    with open(config_path, 'r') as f:
+        config = json.load(f)
+    return config
 
 if __name__ == '__main__':
 
@@ -151,70 +174,53 @@ if __name__ == '__main__':
         device = torch.device('cpu')
         print("Using CPU")
 
-    parser = create_parser()
-    args = parser.parse_args()
+    config = load_config()
 
-    #data related parameters
-    load_from_ckpt = args.load_from_ckpt
-    save_dir = args.save_dir
-    checkpoint_path = args.checkpoint_path
-    train_dataset_path = args.train_dataset_path
-    val_dataset_path = args.val_dataset_path
+    train_loader, val_loader = get_loaders_for_training(
+    # Preprocessing args:
+    data_dir=config["data_dir"], steering_angles_path=config["steering_angles_txt_path"], save_dir=config["csv_save_dir"],
+    filter=config["filter"], norm=config["norm"], turn_threshold=config["turn_threshold"], buffer_before=config["buffer_before"],
+    buffer_after=config["buffer_after"], train_size=config["train_size"],
 
-    train_params = {
-    'seq_len': args.seq_len,
-    'step_size': args.step_size,
-    'imgw': args.imgw,
-    'imgh': args.imgh,
-    'mean': args.mean,
-    'std': args.std,
-    'batch_size': args.batch_size,
-    'shuffle': args.shuffle,
-    'conv_head_lr': args.conv_head_lr,
-    'ncp_lr': args.ncp_lr,
-    'optim_betas': args.optim_betas}
+    # Dataset args:
+    imgh=config["imgh"], imgw=config["imgw"], step_size=config["step_size"], seq_len=config["seq_len"], crop=config["crop"],
 
-    train_dataset , val_dataset = create_train_val_dataset(train_csv_file = train_dataset_path,
-                                                             val_csv_file = val_dataset_path,
-                                                             seq_len=train_params['seq_len'], 
-                                                             step_size=train_params['step_size'],
-                                                             imgw=train_params['imgw'], imgh=train_params['imgh'], 
-                                                             mean=train_params['mean'])
-    
-    train_loader, val_loader = create_train_val_loader(train_dataset, val_dataset,
-                                                         batch_size=train_params['batch_size'], 
-                                                         shuffle=train_params['shuffle'])
+    # Dataloader args:
+    batch_size=config["batch_size"], prefetch_factor=config["prefetch_factor"], num_workers=config["num_workers"], 
+    pin_memory=config["pin_memory"], train_shuffle=config["train_shuffle"])
+
     
     # Assuming extracted features from conv head (8*4) are 32-dimensional
-    model = ConvNCPModel(num_filters=8, features_per_filter=4, inter_neurons = 12, command_neurons = 6,
-                     motor_neurons = 1, sensory_fanout = 6, inter_fanout = 4, 
-                     recurrent_command_synapses = 6, motor_fanin = 6, seed = 20190120) 
-    model.apply(init_weights_he)
+    model = ConvNCPModel(num_filters=8, features_per_filter=config['feat_per_filt'], inter_neurons = 12,
+                        command_neurons = 6, motor_neurons = 1, sensory_fanout = 6, inter_fanout = 4, 
+                        recurrent_command_synapses = 6, motor_fanin = 6, seed = 20190120) 
+    
+    if config['he_init']:
+        model.apply(init_weights_he)
+        
     model = model.to(device)
 
     # Define loss function and optimizer
-    criterion = WeightedMSE(alpha=0.1)
+    criterion = WeightedMSE(config['alpha'])
     optimizer = optim.Adam([
     # Convolutional head
-    {'params': model.conv_head.parameters(), 'lr': train_params['conv_head_lr']},
+    {'params': model.conv_head.parameters(), 'lr': config['conv_head_lr']},
     # NCP/LTC
-    {'params': model.ltc.parameters(), 'lr': train_params['ncp_lr']},
+    {'params': model.ltc.parameters(), 'lr': config['ncp_lr']},
     # Output layer
-    {'params': model.fc_out.parameters(), 'lr': train_params['ncp_lr']}], 
-        betas=train_params['optim_betas'])
+    {'params': model.fc_out.parameters(), 'lr': config['ncp_lr']}], 
+        betas=config['optim_betas'])
 
-    if load_from_ckpt:
-        model_ckpt = torch.load(checkpoint_path, map_location=device)
+    if config['load_from_ckpt']:
+        model_ckpt = torch.load(config['ckpt_path'], map_location=device)
         model.load_state_dict(model_ckpt['model_state_dict'])
         optimizer.load_state_dict(model_ckpt['optimizer_state_dict'])
         current_epoch = model_ckpt['epoch']
         training_losses = model_ckpt['training_losses']
         validation_losses = model_ckpt['validation_losses']
         loaded_train_params = model_ckpt['train_params']
-
-        assert loaded_train_params == train_params
-
         print('checkpoint loaded successfully!')
+
     else:
             current_epoch = 0
             training_losses = []
@@ -231,17 +237,18 @@ if __name__ == '__main__':
           val_loader=val_loader,
           optimizer=optimizer,
           model=model,
-          train_params=train_params,
+          train_params=config,
           criterion=criterion,
           current_epoch=current_epoch,
-          epochs=10, 
-          save_dir=save_dir,
+          epochs=config['epochs'], 
+          save_dir=config['ckpt_save_dir'],
           training_losses=training_losses,
-          validation_losses=validation_losses)
+          validation_losses=validation_losses,
+          save_every=config['save_every'])
     
     final_checkpoint = torch.load(final_model_path)
 
     training_losses = final_checkpoint['training_losses']
     validation_losses = final_checkpoint['validation_losses']
 
-    plot_loss_accuracy(training_losses, validation_losses)
+    plot_loss_accuracy(training_losses, validation_losses, save_dir=config['ckpt_save_dir'])

@@ -1,0 +1,41 @@
+{
+
+    "load_from_ckpt": false,
+    "ckpt_save_dir": "checkpoints/conv_ncp_exp/exp2",
+    "ckpt_path": "",
+    "train_dataset_path": "data/csv_files_experimental/train_flt_ncp_tt_0.06_bb_32_ba_32.csv",
+    "val_dataset_path": "data/csv_files_experimental/val_flt_ncp_tt_0.1_bb_32_ba_32.csv",
+    "save_every": 1,
+    "epochs":10,
+
+    "data_dir":"data/sullychen/07012018/data",
+    "steering_angles_txt_path": "data/sullychen/07012018/data.txt",
+    "csv_save_dir": "data/csv_files_experimental",
+    "filter": true,
+    "norm": true,
+    "turn_threshold": 0.06,
+    "buffer_before": 32,
+    "buffer_after": 32,
+    "train_size": 0.8,
+
+    "imgw": 224,
+    "imgh": 224,
+    "step_size": 16,
+    "seq_len": 32,
+    "mean": [0.485, 0.456, 0.406],
+    "std": [0.229, 0.224, 0.225],
+    "crop": true,
+
+    "batch_size": 16,
+    "prefetch_factor": 2,
+    "num_workers": 4,
+    "pin_memory": true,
+    "train_shuffle": true,
+
+    "conv_head_lr": 0.1,
+    "feat_per_filt":4,
+    "alpha":0.1,
+    "ncp_lr": 0.1,
+    "optim_betas": [0.9, 0.999],
+    "he_init": false
+  }
