@@ -205,6 +205,6 @@ def get_preprocessed_data_pd(data_dir, steering_angles_txt_path, filter = True,
 
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
-        data_pd.to_csv(os.path.join(save_dir,f"ncp_tt_{turn_threshold}_bb_{buffer_before}_ba_{buffer_after}.csv"), index=False)
+        data_pd.to_csv(os.path.join(save_dir,f"ncp_unfiltered.csv"), index=False)
         
         return data_pd

@@ -1,5 +1,4 @@
 {
-
     "load_from_ckpt": false,
     "ckpt_save_dir": "checkpoints/conv_ncp_exp/exp2",
     "ckpt_path": "",
