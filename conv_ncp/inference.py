@@ -1,5 +1,6 @@
 import torch
 import os
+import argparse
 import cv2
 import collections
 import numpy as np
@@ -165,21 +166,43 @@ def get_predicted_steering_angles_from_images(model, images_dir='sullychen/07012
     pd.DataFrame.to_csv(predictions_df, 'code_files/predictons_from_img.csv')
     return
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="ConvNCP inference")
+    parser.add_argument("--data_dir", type=str, default="data/sullychen/07012018/data")
+    parser.add_argument("--train_dataset_path", type=str, default="data/csv_files_experimental/train_flt_ncp_tt_0.08_bb_32_ba_32.csv")
+    parser.add_argument("--val_dataset_path", type=str, default="data/csv_files_experimental/val_flt_ncp_tt_0.08_bb_32_ba_32.csv")
+    parser.add_argument("--checkpoint_path", type=str, default="checkpoints/conv_ncp/checkpoints_bs_16_sql_32_ss_16_wl_heinit/model_epoch20.pth")
+    parser.add_argument("--seq_len", type=int, default=32)
+    parser.add_argument("--imgw", type=int, default=224)
+    parser.add_argument("--imgh", type=int, default=224)
+    parser.add_argument("--mean", nargs=3, type=float, default=[0.485, 0.456, 0.406],
+                        help="Normalization mean ")
+    parser.add_argument("--std", nargs=3, type=float, default=[0.229, 0.224, 0.225],
+                        help="Normalization std ")
+    parser.add_argument("--batch_size", type=int, default=8)
+    parser.add_argument("--train_shuffle", action="store_true",
+                        help="if set, shuffle training data")
+    parser.add_argument("--plot_sequences", action="store_true",
+                        help="if set, visualize sequences during loading")
+    return parser.parse_args()
+
 if __name__ == '__main__':
 
+    args = parse_args()
     device = get_torch_device()
-    data_dir = 'data/sullychen/07012018/data'
-    train_dataset_path = 'data/csv_files_experimental/train_flt_ncp_tt_0.08_bb_32_ba_32.csv'
-    val_dataset_path = 'data/csv_files_experimental/val_flt_ncp_tt_0.08_bb_32_ba_32.csv'
-    checkpoint_path = 'checkpoints/conv_ncp/checkpoints_bs_16_sql_32_ss_16_wl_heinit/model_epoch20.pth'
-    seq_len = 32
-    imgw = 224
-    imgh = 224
-    mean = [0.485, 0.456, 0.406]
-    std = [0.229, 0.224, 0.225]
-    batch_size = 8
-    train_shuffle = False
-    plot_sequences = False
+
+    data_dir = args.data_dir
+    train_dataset_path = args.train_dataset_path
+    val_dataset_path = args.val_dataset_path
+    checkpoint_path = args.checkpoint_path
+    seq_len = args.seq_len
+    imgw = args.imgw
+    imgh = args.imgh
+    mean = args.mean
+    std = args.std
+    batch_size = args.batch_size
+    train_shuffle = args.train_shuffle
+    plot_sequences = args.plot_sequences
 
     #Plot dataloader sequences
     #-------------------------
