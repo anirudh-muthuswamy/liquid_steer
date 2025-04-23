@@ -100,8 +100,8 @@ def create_train_val_loader(train_dataset, val_dataset, train_sampler=None, val_
     val_loader = DataLoader(val_dataset, sampler=val_sampler, batch_size=batch_size, num_workers=num_workers, 
                             prefetch_factor=prefetch_factor, pin_memory=pin_memory, shuffle=False)
 
-    print('len of train loader:', len(train_loader))
-    print('len of val loader', len(val_loader))
+    print('Length of train loader:', len(train_loader))
+    print('Length of val loader', len(val_loader))
 
     for (_, _, inputs, labels) in train_loader:
         print("Batch input shape:", inputs.shape)

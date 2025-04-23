@@ -1,36 +1,15 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.backends.mps as mps
-import torch.backends.cudnn as cudnn
 import os
 import numpy as np
 import cv2
 import json
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-from model import ConvNCPModel, WeightedMSE
-from dataset import get_loaders_for_training
-
-def plot_loss_accuracy(train_loss, val_loss, save_dir=None):
-    epochs = range(1, len(train_loss) + 1)
-
-    plt.figure(figsize=(12, 6))
-
-    # Plot Loss
-    plt.subplot(1, 2, 1)
-    plt.plot(epochs, train_loss, label='Train Loss', color='blue', linestyle='-')
-    plt.plot(epochs, val_loss, label='Validation Loss', color='red', linestyle='--')
-    plt.xlabel('Epochs')
-    plt.ylabel('Loss')
-    plt.legend()
-    plt.title('Loss vs Epochs')
-    plt.tight_layout()
-    if save_dir:
-        plt.savefig(save_dir, bbox_inches='tight')
-        plt.close()
-    else:
-        plt.show()
+from .model import ConvNCPModel, WeightedMSE
+from .dataset import get_loaders_for_training
+from ..utils import get_torch_device, plot_loss_accuracy
 
 def overlay_visual_backprop(input_tensor, mask, save_path=None, alpha=0.1):
     """
@@ -68,7 +47,10 @@ def overlay_visual_backprop(input_tensor, mask, save_path=None, alpha=0.1):
         plt.show()
 
 def train_validate(train_loader, val_loader, optimizer, model, criterion, train_params, current_epoch=0, epochs=10, 
-                   save_dir = 'checkpoints/', training_losses = [], validation_losses = [], save_every=10):
+                   save_dir = 'checkpoints/', training_losses = None, validation_losses = None, save_every=10):
+
+    if training_losses is None: training_losses = []
+    if validation_losses is None: validation_losses = []
 
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
@@ -127,7 +109,7 @@ def train_validate(train_loader, val_loader, optimizer, model, criterion, train_
 
             _ = model.conv_head(x_flat)  # intermediate activations
             vis_mask = model.conv_head.visual_backprop(idx=0)
-            input_image = x_flat[0]  # one image: shape [3, H, W]
+            input_image = x_flat[0]  # shape [3, H, W]
             overlay_visual_backprop(input_image, vis_mask, save_path=f'{backprop_save_dir}/epoch_{epoch+1}.png', alpha=0.5)
             plt.close()
 
@@ -147,7 +129,7 @@ def train_validate(train_loader, val_loader, optimizer, model, criterion, train_
             torch.save(checkpoint, model_path)
             print(f"Checkpoint saved to {save_dir}\n")
 
-    return model_path
+    return training_losses, validation_losses
 
 def init_weights_he(m):
     if isinstance(m, (nn.Linear, nn.Conv2d)):
@@ -162,18 +144,7 @@ def load_config(config_path='./project_src/conv_ncp_config.json'):
 
 if __name__ == '__main__':
 
-    if torch.cuda.is_available():
-        device = torch.device('cuda')
-        cudnn.benchmark = True
-        print(f'Using CUDA device: {torch.cuda.get_device_name(0)}')
-    elif torch.backends.mps.is_available():
-        device = torch.device('mps')
-        mps.benchmark = True
-        print("Using MPS device")
-    else:
-        device = torch.device('cpu')
-        print("Using CPU")
-
+    device = get_torch_device()
     config = load_config()
 
     train_loader, val_loader = get_loaders_for_training(
@@ -201,7 +172,11 @@ if __name__ == '__main__':
     model = model.to(device)
 
     # Define loss function and optimizer
-    criterion = WeightedMSE(config['alpha'])
+    if config['criterion']=='mse':
+        criterion = nn.MSELoss()
+    else:
+        criterion = WeightedMSE(config['alpha'])
+
     optimizer = optim.Adam([
     # Convolutional head
     {'params': model.conv_head.parameters(), 'lr': config['conv_head_lr']},
@@ -233,7 +208,7 @@ if __name__ == '__main__':
         print('Validation losses:', validation_losses)
     print('Current Epoch Number:', current_epoch)
 
-    final_model_path = train_validate(train_loader=train_loader,
+    training_losses, validation_losses = train_validate(train_loader=train_loader,
           val_loader=val_loader,
           optimizer=optimizer,
           model=model,
@@ -245,10 +220,5 @@ if __name__ == '__main__':
           training_losses=training_losses,
           validation_losses=validation_losses,
           save_every=config['save_every'])
-    
-    final_checkpoint = torch.load(final_model_path)
-
-    training_losses = final_checkpoint['training_losses']
-    validation_losses = final_checkpoint['validation_losses']
 
     plot_loss_accuracy(training_losses, validation_losses, save_dir=config['ckpt_save_dir'])

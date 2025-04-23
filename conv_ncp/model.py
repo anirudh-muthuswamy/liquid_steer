@@ -3,6 +3,7 @@ import torch.nn as nn
 from ncps.wirings import NCP
 from ncps.torch import LTC
 import torch.nn.functional as F
+from torchinfo import summary
 
 class WeightedMSE(nn.Module):
     def __init__(self, alpha=0.1):
@@ -54,7 +55,7 @@ class convolutional_head(nn.Module):
         batch_size = x.shape[0]
 
         # apply conv layers
-        # [batch, num_filters, height, width] -> [512, 8, 28, 28] for seq len of 64 and batch size of 8
+        # [batch, num_filters, height, width] -> [512, 8, 28, 28] for seq len of 64 and batch size of 8 (64*8 = 512)
 
         x = self.relu(self.conv1(x)); self.activations.append(x)
         x = self.relu(self.conv2(x)); self.activations.append(x)
@@ -88,7 +89,7 @@ class convolutional_head(nn.Module):
         means = []
 
         for layer_act in self.activations:
-            # [B, C, H, W] -> one sample
+            # [B, C, H, W]
             a = layer_act[idx]  # [C, H, W]
             a = a.float()
             per_channel_max = torch.amax(torch.amax(a, dim=1), dim=1) + 1e-6  # [C]
@@ -102,17 +103,16 @@ class convolutional_head(nn.Module):
         feat_mask = feat_layer.mean(dim=1)  # [F]
         feat_mask = feat_mask / (feat_mask.max() + 1e-6)
 
-        # applies a rough weighting on last activation map
+        # applies a weighting on last activation map
         mask = means[-1] * feat_mask.mean()  # [H, W]
 
-        # backward pass through mean activations (resize each to next layer size)
+        # backward pass through mean activations
         for i in range(len(means) - 2, -1, -1):
             larger = means[i]  # [H, W]
             smaller = F.interpolate(mask.unsqueeze(0).unsqueeze(0), size=larger.shape, mode='bilinear', align_corners=False)
             smaller = smaller.squeeze()
             mask = larger * smaller
 
-        # normalize and move to cpu
         mask = mask - mask.min()
         mask = mask / (mask.max() + 1e-6)
         return mask.detach().cpu().numpy()
@@ -127,14 +127,14 @@ class ConvNCPModel(nn.Module):
 
         # Define NCP wiring based on CommandLayerWormnetArchitecture parameters (from NCP Paper)
         wiring = NCP(
-            inter_neurons=inter_neurons,   # Number of interneurons
-            command_neurons=command_neurons,  # Number of command neurons
-            motor_neurons=motor_neurons,    # Output neurons (1 for steering)
-            sensory_fanout=sensory_fanout,   # Number of interneurons each sensory neuron connects to
-            inter_fanout=inter_fanout,     # Number of command neurons each interneuron connects to
-            recurrent_command_synapses=recurrent_command_synapses,  # Recurrent connections in the command layer
-            motor_fanin=motor_fanin,      # Number of command neurons each motor neuron connects to
-            seed=seed       # Random seed for reproducibility
+            inter_neurons=inter_neurons,   # no. of interneurons
+            command_neurons=command_neurons,  # no. of command neurons
+            motor_neurons=motor_neurons,    # out neurons (1 for steering)
+            sensory_fanout=sensory_fanout,   # no. of interneurons each sensory neuron connects to
+            inter_fanout=inter_fanout,     # no. of command neurons each interneuron connects to
+            recurrent_command_synapses=recurrent_command_synapses,  # reccurent connections in the command layer
+            motor_fanin=motor_fanin,      # no. of command neurons each motor neuron connects to
+            seed=seed       # rand seed for reproducibility
         )
 
         self.conv_head = convolutional_head(num_filters, features_per_filter)
@@ -150,24 +150,26 @@ class ConvNCPModel(nn.Module):
 
     def forward(self, x):
         """
-        Forward pass: Conv Head → LTC-NCP → Fully Connected.
+        Forward pass: Conv Head -> LTC-NCP -> Fully Connected.
         :param x: Input shape [batch, seq_len, channels, height, width]
         :return: Steering angles [batch, seq_len]
         """
         batch_size, seq_len, c, h, w = x.size()
-
-        # flatten batch and sequence for cnn processing
         x = x.view(batch_size * seq_len, c, h, w)
-
-        # extract features using conv head
         features = self.conv_head(x)  # [batch * seq_len, feature_dim]
 
-        # back to [batch, seq_len, feature_dim] for LTC
+        # [batch, seq_len, feature_dim]
         features = features.view(batch_size, seq_len, -1)
-
-        # forward pass through LTC
         outputs, _ = self.ltc(features) # [batch, seq_len, 1]
-
-        # map NCP output to steering angle
         predictions = self.fc_out(outputs) # [batch, seq_len, 1]
         return predictions.squeeze(-1)  # [batch, seq_len]
+    
+if __name__ == "__main__":
+    # random input
+    B, S, C, H, W = 2, 16, 3, 224, 224
+    dummy = torch.randn(B, S, C, H, W)
+
+    #default model params
+    model = ConvNCPModel()
+    
+    summary(model=model, input_size=dummy.shape)

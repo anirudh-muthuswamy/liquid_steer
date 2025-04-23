@@ -4,28 +4,7 @@ from .dataset import get_loaders_for_training
 import torch.nn as nn
 from .model import TemporalResNet, WeightedMSE
 import os
-import matplotlib.pyplot as plt
-from ..utils import get_torch_device, load_config
-
-def plot_loss_accuracy(train_loss, val_loss, save_dir=None):
-    epochs = range(1, len(train_loss) + 1)
-
-    plt.figure(figsize=(12, 6))
-
-    # Plot Loss
-    plt.subplot(1, 2, 1)
-    plt.plot(epochs, train_loss, label='Train Loss', color='blue', linestyle='-')
-    plt.plot(epochs, val_loss, label='Validation Loss', color='red', linestyle='--')
-    plt.xlabel('Epochs')
-    plt.ylabel('Loss')
-    plt.legend()
-    plt.title('Loss vs Epochs')
-    plt.tight_layout()
-    if save_dir:
-        plt.savefig(save_dir, bbox_inches='tight')
-        plt.close()
-    else:
-        plt.show()
+from ..utils import get_torch_device, load_config, plot_loss_accuracy
 
 def train_validate(train_loader, val_loader, optimizer, model, device, criterion,train_params, epochs=10, 
                    training_losses = None, val_losses = None, save_every=2, save_dir='checkpoints/'):
@@ -119,12 +98,35 @@ if __name__ == '__main__':
     batch_size=config["batch_size"], prefetch_factor=config["prefetch_factor"], num_workers=config["num_workers"], 
     pin_memory=config["pin_memory"], train_shuffle=config["train_shuffle"])
 
-    model = TemporalResNet(in_channels=1, height=123, width=455).to(device=device)
+    model = TemporalResNet(in_channels=1, height=config['imgh'], width=config['imgw']).to(device=device)
     if config['criterion']=='mse':
         criterion = nn.MSELoss()
     elif config['criterion']=='weighted_mse':
         criterion = WeightedMSE(alpha=config['alpha'])
     optimizer = torch.optim.Adam(model.parameters(), lr=config['lr'])
 
-    train_validate(train_loader, val_loader, optimizer, model, device, criterion, train_params=config,
-                   epochs=config['epochs'])
+    if config['load_from_ckpt']:
+        model_ckpt = torch.load(config['ckpt_path'], map_location=device)
+        model.load_state_dict(model_ckpt['model_state_dict'])
+        optimizer.load_state_dict(model_ckpt['optimizer_state_dict'])
+        current_epoch = model_ckpt['epoch']
+        training_losses = model_ckpt['training_losses']
+        validation_losses = model_ckpt['validation_losses']
+        loaded_train_params = model_ckpt['train_params']
+        print('checkpoint loaded successfully!')
+    else:
+            current_epoch = 0
+            training_losses = []
+            validation_losses = []
+    
+    if len(training_losses) > 0:
+        print("last training and validation losses:", training_losses[-1], validation_losses[-1])
+    else:
+        print('Training losses:', training_losses)
+        print('Validation losses:', validation_losses)
+    print('Current Epoch Number:', current_epoch)
+
+    training_losses, val_losses = train_validate(train_loader, val_loader, optimizer, model, device, criterion, train_params=config,
+                   save_every=config['save_every'], epochs=config['epochs'])
+    
+    plot_loss_accuracy(training_losses, validation_losses, save_dir=config['ckpt_save_dir'])
