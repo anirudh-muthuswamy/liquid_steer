@@ -3,6 +3,8 @@ import re
 import cv2
 import json
 import pandas as pd
+import numpy as np
+from PIL import Image
 from datetime import datetime
 import matplotlib.pyplot as plt
 import torch
@@ -214,6 +216,35 @@ def get_preprocessed_data_pd(data_dir, steering_angles_txt_path, filter = True,
         
         return data_pd
     
+def calculate_mean_and_std(dataset_path, rgb=True):
+    num_pixels = 0
+    if rgb:
+        channel_sum = np.zeros(3) 
+        channel_sum_squared = np.zeros(3)
+    else:
+        channel_sum = np.zeros(1,)
+        channel_sum_squared = np.zeros(1,) 
+
+    for root, _, files in os.walk(dataset_path):
+        for file in files:
+            image_path = os.path.join(root, file)
+            if rgb:
+                image = Image.open(image_path).convert('RGB')
+            else:
+                image = Image.open(image_path)
+
+            pixels = np.array(image) / 255.0  # normalize pixel values
+            if rgb:
+                num_pixels += pixels.size // 3 
+            else:
+                num_pixels += pixels.size // 1
+
+            channel_sum += np.sum(pixels, axis=(0, 1))
+            channel_sum_squared += np.sum(pixels ** 2, axis=(0, 1))
+
+    mean = channel_sum / num_pixels
+    std = np.sqrt((channel_sum_squared / num_pixels) - mean ** 2)
+    return mean, std
 
 def df_split_train_val(df_filtered, train_csv_filename, val_csv_filename,
                        save_dir='data/csv_files',train_size = 0.8):
