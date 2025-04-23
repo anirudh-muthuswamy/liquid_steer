@@ -1,49 +1,12 @@
 import pandas as pd
 import os
 import torch
-import numpy as np
 import cv2
 from collections import OrderedDict
 from itertools import islice
 from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
-from PIL import Image
-from check_data import get_preprocessed_data_pd
-
-def df_split_train_val(df_filtered, train_csv_filename, val_csv_filename,
-                       save_dir='data/csv_files',train_size = 0.8):
-    train_dataset = df_filtered[:int(train_size * len(df_filtered))]
-    val_dataset = df_filtered[int(train_size * len(df_filtered)):]
-    print('Train dataset length:', len(train_dataset))
-    print('Val dataset length:', len(val_dataset))
-    print(save_dir)
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
-
-    train_dataset.to_csv(os.path.join(save_dir,train_csv_filename), index=False)
-    val_dataset.to_csv(os.path.join(save_dir,val_csv_filename), index=False)
-
-    return os.path.join(save_dir,train_csv_filename), os.path.join(save_dir,val_csv_filename)
-
-def calculate_mean_and_std(dataset_path):
-    num_pixels = 0
-    channel_sum = np.zeros(3)  # Assuming RGB images, change to (1,) for grayscale
-    channel_sum_squared = np.zeros(3)  # Assuming RGB images, change to (1,) for grayscale
-
-    for root, _, files in os.walk(dataset_path):
-        for file in files:
-            image_path = os.path.join(root, file)
-            image = Image.open(image_path).convert('RGB')  # Convert to RGB if needed
-
-            pixels = np.array(image) / 255.0  # Normalize pixel values between 0 and 1
-            num_pixels += pixels.size // 3  # Assuming RGB images, change to 1 for grayscale
-
-            channel_sum += np.sum(pixels, axis=(0, 1))
-            channel_sum_squared += np.sum(pixels ** 2, axis=(0, 1))
-
-    mean = channel_sum / num_pixels
-    std = np.sqrt((channel_sum_squared / num_pixels) - mean ** 2)
-    return mean, std
+from ..utils import get_preprocessed_data_pd, df_split_train_val
 
 class CustomDataset(Dataset):
     def __init__(self, csv_file, seq_len, imgh=224, imgw=224, step_size=1, crop=True, transform=None):
@@ -62,7 +25,7 @@ class CustomDataset(Dataset):
         self.step_size = step_size
         self.crop = crop
 
-        # Group by sequence_id and collect valid sequences
+        # group by sequence_id and collect valid sequences
         self.sequences = OrderedDict({})
         num_sequences_total = 0
         # for each sequence id
@@ -82,7 +45,7 @@ class CustomDataset(Dataset):
         return next(islice(od.items(), i, None))
     
     def _crop_lower_half(self,img, keep_ratio=0.6):
-        #Crops the bottom `keep_ratio` portion of the image.
+        # crops the bottom `keep_ratio` portion of the image.
         h = img.shape[0]
         crop_start = int(h * (1 - keep_ratio))
         return img[crop_start:, :, :]
@@ -95,35 +58,27 @@ class CustomDataset(Dataset):
         sequence_id = seq_batch[0][0]
         seq_num = seq_batch[0][1]
         seq_df = seq_batch[1]
-        # Extract filepaths and steering angles
         img_names = seq_df['filepath'].tolist()
         angles = torch.tensor(seq_df['steering_angle'].tolist(), dtype=torch.float32)
 
-        # Read and process images in one go with OpenCV
+        # read with OpenCV
         images = []
         for img_name in img_names:
             img = cv2.imread(img_name)
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             if self.crop:
                 img = self._crop_lower_half(img)
-            img = cv2.resize(img, (self.imgh, self.imgw ))  # Resize directly with OpenCV
+            img = cv2.resize(img, (self.imgh, self.imgw )) 
             images.append(img)
 
-        # Convert to tensor and normalize in batch
+        # convert to tensor and normalize
         if self.transform:
             images = torch.stack([self.transform(img) for img in images])
 
         return sequence_id, seq_num, images, angles
     
-def create_train_val_dataset(train_csv_file, 
-                              val_csv_file,
-                              seq_len = 32, 
-                              imgw = 224,
-                              imgh = 224,
-                              step_size = 32,
-                              crop = True,
-                              mean=[0.485, 0.456, 0.406],
-                              std=[0.229, 0.224, 0.225]):
+def create_train_val_dataset(train_csv_file, val_csv_file,seq_len = 32, imgw = 224, imgh = 224, step_size = 32, crop = True,
+                              mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]):
     
     transform = transforms.Compose([
         transforms.ToTensor(),  # Convert image to PyTorch tensor
@@ -204,9 +159,9 @@ if __name__ == '__main__':
     filter = True
     norm=True
 
-    turn_threshold = 0.06 
-    buffer_before = 60 
-    buffer_after = 60
+    turn_threshold = 0.08 
+    buffer_before = 32
+    buffer_after = 32
     train_size = 0.8
 
     #custom pytorch dataset args
@@ -221,7 +176,7 @@ if __name__ == '__main__':
     prefetch_factor = 2
     num_workers=4
     pin_memory=True
-    train_shuffle=False
+    train_shuffle=True
 
     get_loaders_for_training(
         #preprocessing args:
