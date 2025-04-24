@@ -1,7 +1,7 @@
 import torch
-import os
 import argparse
 import cv2
+import os
 import collections
 import numpy as np
 import pandas as pd
@@ -115,7 +115,8 @@ def plot_video_from_dataloader(dataloader, num_videos=3):
         display_sequence_as_video(imgs[i], labels[i])  #video for sequence i
 
 
-def get_predicted_steering_angles_from_images(model, images_dir='sullychen/07012018/data', 
+def get_predicted_steering_angles_from_images(model, images_dir='sullychen/07012018/data',
+                                              save_dir='predictions',
                                               seq_len = 32,
                                               num_frames = 1000,
                                               transform_params={
@@ -123,6 +124,8 @@ def get_predicted_steering_angles_from_images(model, images_dir='sullychen/07012
                                                   'std':[0.229, 0.224, 0.225],
                                                   'imgh':224,
                                                   'imgw':224}):
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
 
     seq_len = 32
     frame_buffer = collections.deque(maxlen=seq_len)  # stores last seq_len frames
@@ -163,7 +166,7 @@ def get_predicted_steering_angles_from_images(model, images_dir='sullychen/07012
         predictions['predicted_angles'].append(last_pred)
 
     predictions_df = pd.DataFrame(predictions)
-    pd.DataFrame.to_csv(predictions_df, 'code_files/predictons_from_img.csv')
+    pd.DataFrame.to_csv(predictions_df, os.path.join(save_dir,'conv_ncp_predictions.csv'))
     return
 
 def parse_args():
@@ -171,7 +174,9 @@ def parse_args():
     parser.add_argument("--data_dir", type=str, default="data/sullychen/07012018/data")
     parser.add_argument("--train_dataset_path", type=str, default="data/csv_files_experimental/train_flt_ncp_tt_0.08_bb_32_ba_32.csv")
     parser.add_argument("--val_dataset_path", type=str, default="data/csv_files_experimental/val_flt_ncp_tt_0.08_bb_32_ba_32.csv")
-    parser.add_argument("--checkpoint_path", type=str, default="checkpoints/conv_ncp/checkpoints_bs_16_sql_32_ss_16_wl_heinit/model_epoch20.pth")
+    parser.add_argument("--checkpoint_path", type=str, default="checkpoints/conv_ncp_exp/sl_32_ss_16_bs16_mse_crop_lr1e-3/model_epoch6.pth")
+    parser.add_argument("--save_dir", type=str,default="predictions/",
+                        help="path to load/save model checkpoint")
     parser.add_argument("--seq_len", type=int, default=32)
     parser.add_argument("--imgw", type=int, default=224)
     parser.add_argument("--imgh", type=int, default=224)
@@ -180,6 +185,7 @@ def parse_args():
     parser.add_argument("--std", nargs=3, type=float, default=[0.229, 0.224, 0.225],
                         help="Normalization std ")
     parser.add_argument("--batch_size", type=int, default=8)
+    parser.add_argument("--num_frames", type=int, default=1000, help="number of frames to infer")
     parser.add_argument("--train_shuffle", action="store_true",
                         help="if set, shuffle training data")
     parser.add_argument("--plot_sequences", action="store_true",
@@ -203,6 +209,8 @@ if __name__ == '__main__':
     batch_size = args.batch_size
     train_shuffle = args.train_shuffle
     plot_sequences = args.plot_sequences
+    save_dir = args.save_dir
+    num_frames = args.num_frames
 
     #Plot dataloader sequences
     #-------------------------
@@ -221,12 +229,11 @@ if __name__ == '__main__':
         plot_video_from_dataloader(train_loader_sampled, num_videos=3)
 
     # load model from checkpoint:
-    # Assuming extracted features are 32-dimensional
     model_ckpt = torch.load(checkpoint_path, map_location=device)
-    print(model_ckpt['train_params'])
+    print('Train Params:\n', model_ckpt['train_params'])
     if 'feat_per_filter' in model_ckpt['train_params']:
-        model = ConvNCPModel(num_filters=8, features_per_filter=model_ckpt['train_params']['feat_per_filt'], inter_neurons = 12, command_neurons = 6,
-                     motor_neurons = 1, sensory_fanout = 6, inter_fanout = 4, 
+        model = ConvNCPModel(num_filters=8, features_per_filter=model_ckpt['train_params']['feat_per_filt'], inter_neurons = 12, 
+                             command_neurons = 6, motor_neurons = 1, sensory_fanout = 6, inter_fanout = 4, 
                      recurrent_command_synapses = 6, motor_fanin = 6, seed = 20190120) 
     else: #use default features_per_filter=4
         model = ConvNCPModel(num_filters=8, features_per_filter=4, inter_neurons = 12, command_neurons = 6,
@@ -240,4 +247,4 @@ if __name__ == '__main__':
     validation_losses = model_ckpt['validation_losses']
 
     print('checkpoint loaded successfully!')
-    get_predicted_steering_angles_from_images(model, data_dir)
+    get_predicted_steering_angles_from_images(model, data_dir, save_dir, seq_len, num_frames)
