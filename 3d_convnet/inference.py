@@ -9,6 +9,10 @@ from torchvision import transforms
 from .model import TemporalResNet
 from ..utils import get_full_image_filepaths, get_steering_angles, get_torch_device
 
+# Uses a collections.dequeue object for a frame buffer -> equal to the sequence length the model is trained 
+# on . The frame buffer is used for inference to get the following steering angle given the previous
+# "seq length" number of images. Saves the predictions in a csv file
+
 def get_predicted_steering_angles_from_images(model, device, images_dir='data/sullychen/07012018/edge_maps', 
                                               steering_angles_path='data/sullychen/07012018/data.txt', save_dir = './',
                                               num_frames = 1000,
@@ -60,6 +64,7 @@ def get_predicted_steering_angles_from_images(model, device, images_dir='data/su
     predictions_df = pd.DataFrame(predictions)
     pd.DataFrame.to_csv(predictions_df, os.path.join(save_dir,'conv_lstm_preds.csv'))
 
+#Arg parser for taking in inputs
 def parse_args():
     parser = argparse.ArgumentParser(description="Setup data paths and training parameters")
     # file paths
@@ -79,6 +84,8 @@ def parse_args():
     parser.add_argument("--imgh", type=int, default=123, help="resized image height")
     
     return parser.parse_args()
+
+# Main method that creates model, loads the weights, and calls the predict steering angles method 
 
 if __name__ == '__main__':
 

@@ -5,6 +5,8 @@ import cv2
 from torchinfo import summary
 import numpy as np
 
+#Weigted MSE method, similar to the one implemented by the Neural Circuit Policies paper
+#with a weighing factor of # weighting factor: w(y) = exp(|y|*alpha)
 class WeightedMSE(nn.Module):
     def __init__(self, alpha=0.1):
         super(WeightedMSE, self).__init__()
@@ -19,6 +21,10 @@ class WeightedMSE(nn.Module):
         weighted_loss = squared_error * weights
 
         return weighted_loss.mean()
+
+# 3D Convolution network similar to the one by the paper "Closer Look at Spatiotemporal Convolutions
+# for Action Recognition". This model decomposes convolutions into spatial and temporal convolutions, 
+# adds residual connections, and a linear regression neural head to predict steering angles.
 
 class Conv2Plus1D(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, padding):

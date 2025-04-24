@@ -2,6 +2,9 @@ import os
 import cv2
 import numpy as np
 
+#get canny binary edge maps (with parts of the image above the road) cropped out
+#this is used as input to the 3d convnet
+
 def process_images(input_dir, output_dir):
 
     os.makedirs(output_dir, exist_ok=True)
