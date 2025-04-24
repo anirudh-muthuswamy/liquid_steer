@@ -127,7 +127,6 @@ def get_predicted_steering_angles_from_images(model, images_dir='sullychen/07012
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
 
-    seq_len = 32
     frame_buffer = collections.deque(maxlen=seq_len)  # stores last seq_len frames
     transform = transforms.Compose([
         transforms.ToTensor(),

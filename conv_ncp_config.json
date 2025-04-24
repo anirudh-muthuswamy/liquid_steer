@@ -1,9 +1,9 @@
 {
     "load_from_ckpt": false,
-    "ckpt_save_dir": "checkpoints/conv_ncp_exp/exp2",
+    "ckpt_save_dir": "checkpoints/conv_ncp_exp/exp1",
     "ckpt_path": "",
-    "train_dataset_path": "data/csv_files_experimental/train_flt_ncp_tt_0.06_bb_32_ba_32.csv",
-    "val_dataset_path": "data/csv_files_experimental/val_flt_ncp_tt_0.1_bb_32_ba_32.csv",
+    "train_dataset_path": "data/csv_files_experimental/train_flt_ncp_tt_0.08_bb_32_ba_32.csv",
+    "val_dataset_path": "data/csv_files_experimental/val_flt_ncp_tt_0.08_bb_32_ba_32.csv",
     "save_every": 1,
     "epochs":10,
 
@@ -12,7 +12,7 @@
     "csv_save_dir": "data/csv_files_experimental",
     "filter": true,
     "norm": true,
-    "turn_threshold": 0.06,
+    "turn_threshold": 0.08,
     "buffer_before": 32,
     "buffer_after": 32,
     "train_size": 0.8,
@@ -31,8 +31,9 @@
     "pin_memory": true,
     "train_shuffle": true,
 
-    "conv_head_lr": 0.1,
+    "conv_head_lr": 2.5e-5,
     "feat_per_filt":4,
+    "criterion":"mse",
     "alpha":0.1,
     "ncp_lr": 0.1,
     "optim_betas": [0.9, 0.999],
