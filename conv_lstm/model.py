@@ -2,6 +2,9 @@ import torch
 import torch.nn as nn
 from torchinfo import summary
 
+
+#Weigted MSE method, similar to the one implemented by the Neural Circuit Policies paper
+#with a weighing factor of # weighting factor: w(y) = exp(|y|*alpha)
 class WeightedMSE(nn.Module):
     def __init__(self, alpha=0.1):
         super(WeightedMSE, self).__init__()
@@ -16,6 +19,9 @@ class WeightedMSE(nn.Module):
         weighted_loss = squared_error * weights
 
         return weighted_loss.mean()
+    
+#ConvLSTMCell that defines the convolution parameters for the 4 gates involved in a LSTM
+# This is abstracted from the dynamics presented in https://github.com/ndrplz/ConvLSTM_pytorch
 
 class ConvLSTMCell(nn.Module):
 
@@ -57,6 +63,9 @@ class ConvLSTMCell(nn.Module):
             torch.zeros(batch_size, self.hidden_dim, height, width, device=device),
         )
 
+# Spatial Temporal (ST)-Conv-LSTM that uses 4 ConvLSTMCells with 3D batchnorm for each cell.
+# The outputs from these cells are stacked and then passed to a conv3d layer, max pooled and 
+# a linear regression head with a single scalar output for the steering angle at the next frame
 class STConvLSTM(nn.Module):
     def __init__(
         self, seq_len=3, height=224, width=224, input_channels=3, hidden_channels=8, fc_units=50, dropout=0.5):

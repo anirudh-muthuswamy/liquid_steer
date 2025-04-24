@@ -141,7 +141,7 @@ def get_loaders_for_training(data_dir, steering_angles_path, step_size, seq_len,
 
     return train_loader, val_loader
 
-#main method to create csv files and test dataloader
+#main method to create csv files and test the dataloader
 if __name__ == '__main__':
 
     #preprocessing csv file args

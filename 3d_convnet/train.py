@@ -81,6 +81,9 @@ def train_validate(train_loader, val_loader, optimizer, model, device, criterion
 
     return training_losses, val_losses
 
+# the train method uses a 3d_convnet_config.json file with all the parameters defined for model creation
+# dataloading, training, and saving the checkpoints.
+
 if __name__ == '__main__':
 
     device = get_torch_device(dont_use_mps=True)

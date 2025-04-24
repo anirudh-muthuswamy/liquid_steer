@@ -6,6 +6,7 @@ from .model import STConvLSTM, WeightedMSE
 import os
 from ..utils import get_torch_device, load_config, plot_loss_accuracy
 
+# train and validation per epoch method, with checkpoint saving
 def train_validate(train_loader, val_loader, optimizer, model, device, criterion,train_params, epochs=10, 
                    training_losses = None, val_losses = None, save_every=2, save_dir='checkpoints/'):
 
@@ -79,6 +80,9 @@ def train_validate(train_loader, val_loader, optimizer, model, device, criterion
             print(f"Checkpoint saved to {save_dir}\n")
 
     return training_losses, val_losses
+
+# the train method uses a conv_lstm_config.json file with all the parameters defined for model creation
+# dataloading, training, and saving the checkpoints.
 
 if __name__ == '__main__':
 

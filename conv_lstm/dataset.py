@@ -6,6 +6,11 @@ from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
 from ..utils import get_preprocessed_data_pd, df_split_train_val
 
+# This class `CustomDataset` is designed to create a custom PyTorch dataset for sequential data with
+# image frames and the immediately following steering angle, allowing for data loading and transformation.
+#  x -> Input tensor of shape (C, seq_len, H, W).
+#  y -> Target tensor of shape (1,) containing the next frame's steering angle.
+
 class CustomDataset(Dataset):
     def __init__(self, csv_file, seq_len, imgh=224, imgw=224, step_size=1, crop=True, transform=None):
 
@@ -56,7 +61,7 @@ class CustomDataset(Dataset):
         y = torch.tensor([next_angle], dtype=torch.float32)
         return x, y
     
-
+# creates train and validation torch CustomDataset object given input parameters, and image transforms
 def create_train_val_dataset(train_csv_file, val_csv_file, seq_len = 32, imgw = 224, imgh = 224,
                              step_size = 32, crop = True, mean=[0.485, 0.456, 0.406],
                              std=[0.229, 0.224, 0.225]):
@@ -73,6 +78,7 @@ def create_train_val_dataset(train_csv_file, val_csv_file, seq_len = 32, imgw = 
 
     return train_dataset, val_dataset
 
+#creates train and validation torch dataloaders given input parameters 
 def create_train_val_loader(train_dataset, val_dataset, train_sampler=None, val_sampler=None, batch_size=8,
                             num_workers=4, prefetch_factor=2, pin_memory=True, train_shuffle=False):
 
@@ -91,6 +97,8 @@ def create_train_val_loader(train_dataset, val_dataset, train_sampler=None, val_
 
     return train_loader, val_loader
 
+# method to take input df, split into train and val, create CustomDataset and Dataloader objects
+#(for easier repetitive use with a single method)
 def get_loaders_for_training(data_dir, steering_angles_path, step_size, seq_len, imgh, imgw, filter, turn_threshold, 
                                      buffer_before, buffer_after, crop=True, train_size=0.8, save_dir='data/csv_files', 
                                      norm=True, batch_size=16, num_workers=4, prefetch_factor=4, pin_memory=True, train_shuffle=False):
@@ -131,6 +139,7 @@ def get_loaders_for_training(data_dir, steering_angles_path, step_size, seq_len,
 
     return train_loader, val_loader
 
+#main method to create csv files and test the dataloader
 if __name__ == '__main__':
 
     #preprocessing csv file args
