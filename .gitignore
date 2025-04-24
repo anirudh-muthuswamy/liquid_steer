@@ -2,3 +2,4 @@ __pycache__
 *.csv
 dino_checkpoints
 IDD_Data
+.DS_Store
