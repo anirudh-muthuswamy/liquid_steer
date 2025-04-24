@@ -87,7 +87,7 @@ def train_validate(train_loader, val_loader, optimizer, model, device, criterion
 if __name__ == '__main__':
 
     device = get_torch_device(dont_use_mps=True)
-    config = load_config(config_path='project_src/3d_convnet_config.json')
+    config = load_config(config_path='project_src/conv_lstm_config.json')
 
     train_loader, val_loader = get_loaders_for_training(
     # Preprocessing args:

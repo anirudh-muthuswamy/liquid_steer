@@ -5,6 +5,9 @@ from ncps.torch import LTC
 import torch.nn.functional as F
 from torchinfo import summary
 
+#Weigted MSE method, similar to the one implemented by the Neural Circuit Policies paper
+#with a weighing factor of # weighting factor: w(y) = exp(|y|*alpha)
+
 class WeightedMSE(nn.Module):
     def __init__(self, alpha=0.1):
         super(WeightedMSE, self).__init__()
@@ -20,6 +23,7 @@ class WeightedMSE(nn.Module):
 
         return weighted_loss.mean()
 
+#Convolutional head for the conv-ncp model (same construction from the Neural Circuit Policy Paper)
 class convolutional_head(nn.Module):
     def __init__(self, num_filters = 8, features_per_filter = 16):
         super(convolutional_head, self).__init__()
@@ -35,7 +39,7 @@ class convolutional_head(nn.Module):
 
         self.relu = nn.ReLU()
 
-        # FC to extract features per filter
+        # FC to extract features per filter to pass to the sensory neurons for the LTC wiring
         self.fc_layers = nn.ModuleList([
             nn.Linear(28 * 28, features_per_filter) for _ in range(num_filters)
         ])
@@ -44,12 +48,6 @@ class convolutional_head(nn.Module):
         self.feature_layer = None
 
     def forward(self, x):
-        """
-        Forward pass of the convolutional head.
-
-        :param x: Input tensor of shape [batch, channels, height, width]
-        :return: Feature vector of shape [batch, num_filters * features_per_filter]
-        """
 
         self.activations = []
         batch_size = x.shape[0]
@@ -79,12 +77,11 @@ class convolutional_head(nn.Module):
         self.feature_layer = feature_layer
 
         return feature_layer
-    
+
+    #Visual backprop to get activation from each of the conv layers and then backward pass through
+    # the mean activations to get heatmap
     def visual_backprop(self, idx=0):
-        """
-        VisualBackprop-like mask computation using torch (GPU compatible).
-        Returns: [H, W] attention mask (still returned as a CPU numpy array).
-        """
+
         # mean maps for each layer
         means = []
 
@@ -117,6 +114,7 @@ class convolutional_head(nn.Module):
         mask = mask / (mask.max() + 1e-6)
         return mask.detach().cpu().numpy()
 
+# ConvNCP model constructed with ConvHead and LTC with wiring defined from the NCP paper
     
 class ConvNCPModel(nn.Module):
     def __init__(self, num_filters=8, features_per_filter=4, 
@@ -149,11 +147,7 @@ class ConvNCPModel(nn.Module):
         self.fc_out = nn.Linear(wiring.output_dim, 1)
 
     def forward(self, x):
-        """
-        Forward pass: Conv Head -> LTC-NCP -> Fully Connected.
-        :param x: Input shape [batch, seq_len, channels, height, width]
-        :return: Steering angles [batch, seq_len]
-        """
+
         batch_size, seq_len, c, h, w = x.size()
         x = x.view(batch_size * seq_len, c, h, w)
         features = self.conv_head(x)  # [batch * seq_len, feature_dim]

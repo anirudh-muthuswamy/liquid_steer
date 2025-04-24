@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 from torchinfo import summary
 
-
 #Weigted MSE method, similar to the one implemented by the Neural Circuit Policies paper
 #with a weighing factor of # weighting factor: w(y) = exp(|y|*alpha)
 class WeightedMSE(nn.Module):

@@ -13,6 +13,12 @@ from .dataset import create_train_val_dataset, create_train_val_loader
 from ..utils import (get_full_image_filepaths, get_torch_device)
 from torch.utils.data import Sampler
 
+# This is used for plotting different sequences. Since the step size between sequences are small, 
+# consecutive sequences would be very similar if theres is just a change of 1-5 frames. Hence, 
+# we use a sequence sampler, that just samples the first sequence number for a particular sequence id. 
+# A sequence id might be split into different sequences of a smaller length. 
+# This allows for easier visualization and sanity checks
+
 class UniqueSequenceSampler(Sampler):
 
     def __init__(self, dataset):
@@ -34,7 +40,7 @@ class UniqueSequenceSampler(Sampler):
     def __len__(self):
         return len(self.indices)
 
-
+#reverse transform the transformations applied during dataset and dataloader creation
 def reverse_transform(tensor):
 
     #imagenet mean and std
@@ -48,6 +54,7 @@ def reverse_transform(tensor):
     img = (img * 255).astype(np.uint8)  # Scale to [0, 255] for visualization
     return img
 
+#Method to plot out dataloder samples
 def plot_dataloader_samples(dataloader, num_rows = 3, num_cols=3, figsize=(10, 10)):
 
     batch = next(iter(dataloader))
@@ -73,14 +80,9 @@ def plot_dataloader_samples(dataloader, num_rows = 3, num_cols=3, figsize=(10, 1
     plt.tight_layout()
     plt.show(block=True)
 
+# This method animates the sequences as videos with a different label (i,e the steering angle) / frame
 def display_sequence_as_video(sequence, labels, figsize=(4, 4)):
-    """
-    Displays a sequence of images as a video animation, with a different label per frame.
 
-    Args:
-        sequence (Tensor): Shape [seq_length, C, H, W]
-        labels (Tensor): Shape [seq_length] containing a label for each frame.
-    """
     seq_length = sequence.shape[0]
 
     fig, ax = plt.subplots(figsize=figsize)
@@ -97,14 +99,10 @@ def display_sequence_as_video(sequence, labels, figsize=(4, 4)):
     animation.FuncAnimation(fig, update, frames=seq_length, interval=100, blit=True)
     plt.show(block=True)
 
+# calls the display_sequence_as_vide for the number of videos passed as input
+# this should be less than the batch size, else batch size number of images are plotted/visualized
 def plot_video_from_dataloader(dataloader, num_videos=3):
-    """
-    Displays multiple sequences as video animations from the DataLoader.
 
-    Args:
-        dataloader: PyTorch DataLoader
-        num_videos (int): Number of videos to display
-    """
     batch = next(iter(dataloader))
     sequence_id, seq_num, imgs, labels = batch 
 
@@ -114,6 +112,9 @@ def plot_video_from_dataloader(dataloader, num_videos=3):
         print(sequence_id[i], seq_num[i])
         display_sequence_as_video(imgs[i], labels[i])  #video for sequence i
 
+# Uses a collections.dequeue object for a frame buffer -> equal to the sequence length the model is trained 
+# on . The frame buffer is used for inference to get the following steering angle given the previous
+# "seq length" number of images. Saves the predictions in a csv file
 
 def get_predicted_steering_angles_from_images(model, images_dir='sullychen/07012018/data',
                                               save_dir='predictions',
@@ -168,6 +169,7 @@ def get_predicted_steering_angles_from_images(model, images_dir='sullychen/07012
     pd.DataFrame.to_csv(predictions_df, os.path.join(save_dir,'conv_ncp_predictions.csv'))
     return
 
+# Argparser to take in inputs for running inference
 def parse_args():
     parser = argparse.ArgumentParser(description="ConvNCP inference")
     parser.add_argument("--data_dir", type=str, default="data/sullychen/07012018/data")

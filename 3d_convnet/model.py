@@ -50,7 +50,7 @@ class Conv2Plus1D(nn.Module):
         x = self.bn_temporal(x)
         return self.relu(x)
     
-
+# Residal Main class that has a sequence of Conv2Plus1D blocks 
 class ResidualMain(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size):
         super().__init__()
@@ -61,6 +61,8 @@ class ResidualMain(nn.Module):
     def forward(self, x):
         return self.conv2(self.conv1(x))
     
+# Projects the input to a size that is possible for concatenation with the Residual block
+#This uses a Conv3d with a kernel size of 1 to do so
 class Project(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
@@ -72,6 +74,8 @@ class Project(nn.Module):
     def forward(self, x):
         return self.proj(x)
     
+# Residual blocks to add x (res) with the output. Checks if the in channels are equal to the out channels
+# if not projects the in channel to the same as out_channels
 class ResidualBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size):
         super().__init__()
@@ -86,6 +90,7 @@ class ResidualBlock(nn.Module):
         out = self.main(x)
         return self.relu(out + res)
     
+# This interpolates/resizes the frames using torch.nn.functional. Used in sequence with Conv2Plus1D blocks
 class ResizeVideo(nn.Module):
     def __init__(self, out_size):
         super().__init__()
@@ -101,6 +106,8 @@ class ResizeVideo(nn.Module):
         h, w = self.out_size
         return frames.reshape(B, T, C, h, w).permute(0,2,1,3,4)
     
+# Complete TemporalResnet Block with 4 stages of ResidualBlocks, spatio temporal pooling with AdaptiveAvgPool3d
+# and a linear regression head.
 class TemporalResNet(nn.Module):
     def __init__(self, 
                  in_channels=1, 

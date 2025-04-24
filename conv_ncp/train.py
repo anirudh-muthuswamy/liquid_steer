@@ -9,18 +9,12 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from .model import ConvNCPModel, WeightedMSE
 from .dataset import get_loaders_for_training
-from ..utils import get_torch_device, plot_loss_accuracy
+from ..utils import get_torch_device, plot_loss_accuracy, load_config
 
+#Method used to overlay the visual backprop activation mask on the original image
+#with a blending factor "alpha"
 def overlay_visual_backprop(input_tensor, mask, save_path=None, alpha=0.1):
-    """
-    Overlays the visual backprop mask on the original input image.
 
-    Args:
-        input_tensor: [3, H, W] torch.Tensor (before batch dimension), normalized
-        mask: [H, W] numpy array, already normalized [0, 1]
-        save_path: optional path to save overlay image
-        alpha: blending factor (heatmap vs original)
-    """
     #denormalize image (undo mean/std normalization)
     mean = np.array([0.485, 0.456, 0.406])
     std = np.array([0.229, 0.224, 0.225])
@@ -46,6 +40,7 @@ def overlay_visual_backprop(input_tensor, mask, save_path=None, alpha=0.1):
     else:
         plt.show()
 
+# train and validation per epoch method, with checkpoint saving
 def train_validate(train_loader, val_loader, optimizer, model, criterion, train_params, current_epoch=0, epochs=10, 
                    save_dir = 'checkpoints/', training_losses = None, validation_losses = None, save_every=10):
 
@@ -97,7 +92,7 @@ def train_validate(train_loader, val_loader, optimizer, model, criterion, train_
 
         print(f"Validation Loss: {total_val_loss / len(val_loader)}")
         
-        # visualbackprop dump
+        # visualbackprop dump that calls visual_backprop method from the conv_head
         with torch.no_grad():
             model.eval()
             batch = next(iter(train_loader))
@@ -131,21 +126,19 @@ def train_validate(train_loader, val_loader, optimizer, model, criterion, train_
 
     return training_losses, validation_losses
 
+#initialize weights with He weight initialization
+
 def init_weights_he(m):
     if isinstance(m, (nn.Linear, nn.Conv2d)):
         nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='relu')
         if m.bias is not None:
             nn.init.zeros_(m.bias)
 
-def load_config(config_path='./project_src/conv_ncp_config.json'):
-    with open(config_path, 'r') as f:
-        config = json.load(f)
-    return config
 
 if __name__ == '__main__':
 
     device = get_torch_device()
-    config = load_config()
+    config = load_config(config_path='./project_src/conv_ncp_config.json')
 
     train_loader, val_loader = get_loaders_for_training(
     # Preprocessing args:
