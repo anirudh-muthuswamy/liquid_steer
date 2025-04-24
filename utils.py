@@ -246,6 +246,26 @@ def calculate_mean_and_std(dataset_path, rgb=True):
     std = np.sqrt((channel_sum_squared / num_pixels) - mean ** 2)
     return mean, std
 
+def plot_loss_accuracy(train_loss, val_loss, save_dir=None):
+    epochs = range(1, len(train_loss) + 1)
+
+    plt.figure(figsize=(12, 6))
+
+    # Plot Loss
+    plt.subplot(1, 2, 1)
+    plt.plot(epochs, train_loss, label='Train Loss', color='blue', linestyle='-')
+    plt.plot(epochs, val_loss, label='Validation Loss', color='red', linestyle='--')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.title('Loss vs Epochs')
+    plt.tight_layout()
+    if save_dir:
+        plt.savefig(save_dir, bbox_inches='tight')
+        plt.close()
+    else:
+        plt.show()
+
 def df_split_train_val(df_filtered, train_csv_filename, val_csv_filename,
                        save_dir='data/csv_files',train_size = 0.8):
     train_dataset = df_filtered[:int(train_size * len(df_filtered))]
