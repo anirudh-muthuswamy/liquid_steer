@@ -43,14 +43,15 @@ def get_predicted_steering_angles_from_images(model, device, images_dir='data/su
             break
 
         img = np.expand_dims(cv2.imread(frame, cv2.IMREAD_GRAYSCALE),2)
-        img = cv2.resize(img, (transform_params['imgh'], transform_params['imgw'])) 
+        print(img.shape)
+        img = cv2.resize(img, (transform_params['imgw'], transform_params['imgh'])) 
         img = transform(img)
 
         frame_buffer.append(img)
         if len(frame_buffer) < sequence_length:
             continue
         
-        input_sequence = torch.stack(list(frame_buffer)).unsqueeze(0).to(device)
+        input_sequence = torch.stack(list(frame_buffer)).unsqueeze(0).to(device).permute(0, 2, 1, 3, 4)
         
         with torch.no_grad():
             prediction = model(input_sequence)  # [1, 64]
@@ -73,7 +74,7 @@ def parse_args():
     parser.add_argument("--steering_angles_path", type=str, default="data/sullychen/07012018/data.txt",
                         help="path to steering angles text file")
     parser.add_argument("--checkpoint_path", type=str,
-                        default="checkpoints/checkpoints_lstm/checkpoints_rad_1e-5/model_epoch7.pth",
+                        default="project_src/best_model_weights/3d_convnet/model_epoch20.pth",
                         help="path to load/save model checkpoint")
     parser.add_argument("--save_dir", type=str,
                         default="predictions/",

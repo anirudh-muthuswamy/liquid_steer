@@ -175,7 +175,7 @@ def parse_args():
     parser.add_argument("--data_dir", type=str, default="data/sullychen/07012018/data")
     parser.add_argument("--train_dataset_path", type=str, default="data/csv_files_experimental/train_flt_ncp_tt_0.08_bb_32_ba_32.csv")
     parser.add_argument("--val_dataset_path", type=str, default="data/csv_files_experimental/val_flt_ncp_tt_0.08_bb_32_ba_32.csv")
-    parser.add_argument("--checkpoint_path", type=str, default="checkpoints/conv_ncp_exp/sl_32_ss_16_bs16_mse_crop_lr1e-3/model_epoch6.pth")
+    parser.add_argument("--checkpoint_path", type=str, default="project_src/best_model_weights/conv_ncp/model_epoch50.pth")
     parser.add_argument("--save_dir", type=str,default="predictions/",
                         help="path to load/save model checkpoint")
     parser.add_argument("--seq_len", type=int, default=32)

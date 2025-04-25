@@ -73,12 +73,12 @@ def parse_args():
     parser.add_argument("--steering_angles_path", type=str, default="data/sullychen/07012018/data.txt",
                         help="path to steering angles text file")
     parser.add_argument("--checkpoint_path", type=str,
-                        default="checkpoints/checkpoints_lstm/checkpoints_rad_1e-5/model_epoch7.pth",
+                        default="project_src/best_model_weights/conv_lstm/model_epoch11.pth",
                         help="path to load/save model checkpoint")
     parser.add_argument("--save_dir", type=str,
                         default="predictions/",
                         help="path to load/save model checkpoint")
-    parser.add_argument("--seq_len", type=int, default=3, help="number of frames per sequence")
+    parser.add_argument("--seq_len", type=int, default=6, help="number of frames per sequence")
     parser.add_argument("--num_frames", type=int, default=1000, help="number of frames to infer")
     parser.add_argument("--imgw", type=int, default=224, help="resized image width")
     parser.add_argument("--imgh", type=int, default=224, help="resized image height")
