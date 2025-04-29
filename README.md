@@ -11,11 +11,6 @@ Each model is implemented in its own directory with associated training and infe
 (All models can be run on CUDA devices, whereas when using an MPS device, Conv3D for the LSTM and Temporal Residual Network is not implemented, hence it should be run on CPU)
 
 The dataset used can be found here: https://github.com/SullyChen/driving-datasets
-
-If you want to use the kaggle notebooks, I have created kaggle dataset from the SullyChen dataset along with edgemaps. The links are
-1. SullyChen Kaggle Dataset: https://www.kaggle.com/datasets/anirudhmuthuswamy/sullychen
-2. SullyChen EdgeMaps:(Used for Temporal Residual Network with 3D Conv): https://www.kaggle.com/datasets/anirudhmuthuswamy/sullychen-edgemaps
-   
 ---
 
 ## Project Structure
